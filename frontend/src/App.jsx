@@ -1,15 +1,24 @@
 import { useState } from 'react';
 import ChatBubble from './components/ChatBubble';
 import ChatInput from './components/ChatInput';
+import { sendMessage } from './api';
 
 function App() {
   const [messages, setMessages] = useState([
     { sender: 'bot', text: 'Halo! Cerita aja pemasukan/pengeluaran kamu'},
   ]);
 
-  function handleSend(text) {
+  async function handleSend(text) {
     if (!text.trim()) return;
+
     setMessages((prev) => [...prev, { sender: 'user', text }]);
+    
+    try {
+      const data = await sendMessage(text);
+      setMessages((prev) => [...prev, { sender: 'bot', text: data.reply }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { sender: 'bot', text: 'Waduh, gagal connect ke server nich..' }]);
+    }
   }
 
   return (
@@ -20,7 +29,7 @@ function App() {
       ))}
       <ChatInput onSend={handleSend} />
     </div>
-  )
+  );
 }
 
 export default App;
