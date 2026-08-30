@@ -1,0 +1,14 @@
+# environtment & secrets
+.env
+*.env
+
+# Node
+node_modules/
+
+# Go
+*.exe
+*.test
+
+# Editor
+.vscode/
+.idea/
