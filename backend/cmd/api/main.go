@@ -1,15 +1,20 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 
 	"tuwangapp/backend/internal/handler"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("Peringatan: file .env tidak ditemukan")
+	}
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
