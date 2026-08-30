@@ -5,6 +5,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+
+	"tuwangapp/backend/internal/handler"
 )
 
 func main() {
@@ -21,6 +23,8 @@ func main() {
 			"status": "ok",
 		})
 	})
+
+	router.POST("/api/v1/chat", handler.ChatHandler)
 
 	router.Run(":8080")
 }
