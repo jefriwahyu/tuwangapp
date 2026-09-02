@@ -31,11 +31,13 @@ type groqResponse struct {
 
 // ExtractedMessage adalah bentuk data yang kita PAKSA LLM untuk balikin.
 type ExtractedMessage struct {
-	IsTransaction bool    `json:"is_transaction"`
-	Type          string  `json:"type"`
-	Amount        float64 `json:"amount"`
-	Category      string  `json:"category"`
-	Reply         string  `json:"reply"`
+	Intent string `json:"intent"`
+	// IsTransaction bool    `json:"is_transaction"`
+	Type     string  `json:"type"`
+	Amount   float64 `json:"amount"`
+	Category string  `json:"category"`
+	Period   string  `json:"period"`
+	Reply    string  `json:"reply"`
 }
 
 const systemPrompt = `Kamu adalah asisten pencatat keuangan berbahasa Indonesia yang ramah dan santai.
@@ -43,19 +45,23 @@ const systemPrompt = `Kamu adalah asisten pencatat keuangan berbahasa Indonesia 
 Baca pesan user, tentukan apakah itu laporan transaksi (pemasukan/pengeluaran), lalu SELALU balas HANYA dalam format JSON persis seperti ini, tanpa teks lain di luar JSON:
 
 {
-  "is_transaction": true atau false,
-  "type": "income" atau "expense" (kosongkan "" kalau is_transaction false),
-  "amount": angka nominal dalam Rupiah (0 kalau is_transaction false),
-  "category": kategori singkat, misal "Makanan", "Gaji", "Transportasi" (kosongkan "" kalau is_transaction false),
+  "intent": "transaction" atau "query_report" atau "chitchat",
+  "type": "income" atau "expense" (kosongkan "" kalau intent bukan "transaction"),
+  "amount": angka nominal dalam Rupiah (0 kalau intent bukan "transaction"),
+  "category": kategori singkat, misal "Makanan", "Gaji", "Transportasi" (kosongkan "" kalau intent bukan "transaction"),
+  "period": "today" atau "month" atay "year" (kosongkan "" kalau bukanquery_report),
   "reply": balasan ramah dalam Bahasa Indonesia untuk ditampilkan ke user
 }
 
 Contoh:
 User: "aku tadi beli kopi 15rb"
-{"is_transaction": true, "type": "expense", "amount": 15000, "category": "Makanan & Minuman", "reply": "Oke, dicatat pengeluaran Rp15.000 untuk kopi ya. Ada lagi?"}
+{"intent": "transaction", "type": "expense", "amount": 15000, "category": "Makanan & Minuman", "period": "", "reply": "Oke, dicatat pengeluaran Rp15.000 untuk kopi ya. Ada lagi?"}
+
+User: "coba lihat pemasukan bulan ini dong"
+{"intent": "query_report", "type": "", "amount": 0, "category": "", "period": "month", "reply": ""}
 
 User: "halo"
-{"is_transaction": false, "type": "", "amount": 0, "category": "", "reply": "Halo! Cerita aja pemasukan atau pengeluaran kamu, nanti aku catat."}`
+{"intent": "chitchat", "type": "", "amount": 0, "category": "", "period": "", "reply": "Halo! Cerita aja pemasukan atau pengeluaran kamu, nanti aku catat."}`
 
 func ExtractTransaction(userMessage string) (ExtractedMessage, error) {
 	apiKey := os.Getenv("GROQ_API_KEY")
