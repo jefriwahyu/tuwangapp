@@ -63,7 +63,7 @@ func GetSummary(period string) (income float64, expense float64, err error) {
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
 
-	startDate := periodStartDate(period)
+	startDate, endDate := periodRange(period)
 
 	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
 	if err != nil {
@@ -71,7 +71,8 @@ func GetSummary(period string) (income float64, expense float64, err error) {
 	}
 	q := u.Query()
 	q.Set("select", "type,amount")
-	q.Set("created_at", "gte."+startDate)
+	q.Add("created_at", "gte."+startDate)
+	q.Add("created_at", "lt."+endDate)
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
@@ -106,16 +107,24 @@ func GetSummary(period string) (income float64, expense float64, err error) {
 	return income, expense, nil
 }
 
-func periodStartDate(period string) string {
+func periodRange(period string) (start, end string) {
 	now := time.Now()
-	var start time.Time
+	var startTime, endTime time.Time
+
 	switch period {
+	case "yesterday":
+		y := now.AddDate(0, 0, -1)
+		startTime = time.Date(y.Year(), y.Month(), y.Day(), 0, 0, 0, 0, now.Location())
+		endTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	case "month":
-		start = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		startTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		endTime = now
 	case "year":
-		start = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+		startTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+		endTime = now
 	default: // "today"
-		start = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		endTime = now
 	}
-	return start.Format(time.RFC3339)
+	return startTime.Format(time.RFC3339), endTime.Format(time.RFC3339)
 }

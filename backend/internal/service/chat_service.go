@@ -42,6 +42,8 @@ func ProcessMessage(req model.ChatRequest) model.ChatResponse {
 
 func periodLabel(period string) string {
 	switch period {
+	case "yesterday":
+		return "kemarin"
 	case "month":
 		return "bulan ini"
 	case "year":

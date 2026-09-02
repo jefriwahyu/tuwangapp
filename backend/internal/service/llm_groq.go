@@ -60,6 +60,9 @@ User: "aku tadi beli kopi 15rb"
 User: "coba lihat pemasukan bulan ini dong"
 {"intent": "query_report", "type": "", "amount": 0, "category": "", "period": "month", "reply": ""}
 
+User: "coba lihat pengeluaran kemarin"
+{"intent": "query_report", "type": "", "amount": 0, "category": "", "period": "yesterday", "reply": ""}
+
 User: "halo"
 {"intent": "chitchat", "type": "", "amount": 0, "category": "", "period": "", "reply": "Halo! Cerita aja pemasukan atau pengeluaran kamu, nanti aku catat."}`
 
