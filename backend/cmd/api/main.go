@@ -31,5 +31,7 @@ func main() {
 
 	router.POST("/api/v1/chat", handler.ChatHandler)
 
+	router.GET("/api/v1/summary", handler.GetSummaryHandler)
+
 	router.Run(":8080")
 }

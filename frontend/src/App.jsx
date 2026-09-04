@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import ChatBubble from './components/ChatBubble';
 import ChatInput from './components/ChatInput';
+import SummaryChart from './components/SummaryChart';
 import { sendMessage } from './api';
 
 function App() {
@@ -28,6 +29,8 @@ function App() {
         <ChatBubble key={i} sender={msg.sender} text={msg.text} />
       ))}
       <ChatInput onSend={handleSend} />
+      <hr />
+      <SummaryChart />
     </div>
   );
 }
