@@ -4,14 +4,14 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Lege
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
-function SummaryChart() {
+function SummaryChart({ period }) {
     const [summary, setSummary] = useState(null);
 
     useEffect(() => {
-        fetch('http://localhost:8080/api/v1/summary?period=month')
+        fetch(`http://localhost:8080/api/v1/summary?period=${period}`)
             .then((res) => res.json())
             .then((data) => setSummary(data));
-    }, []);
+    }, [period]);
 
     if (!summary) return <p>Memuat rekap...</p>;
 

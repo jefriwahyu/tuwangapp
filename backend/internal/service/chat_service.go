@@ -33,7 +33,7 @@ func ProcessMessage(req model.ChatRequest) model.ChatResponse {
 			"Rekap %s:\nPemasukan: Rp%.0f\nPengeluaran: Rp%.0f",
 			periodLabel(extracted.Period), income, expense,
 		)
-		return model.ChatResponse{Reply: reply}
+		return model.ChatResponse{Reply: reply, Period: extracted.Period}
 
 	default: // chitchat
 		return model.ChatResponse{Reply: extracted.Reply}

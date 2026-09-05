@@ -5,5 +5,6 @@ type ChatRequest struct {
 }
 
 type ChatResponse struct {
-	Reply string `json:"reply"`
+	Reply  string `json:"reply"`
+	Period string `json:"period,omitempty"`
 }

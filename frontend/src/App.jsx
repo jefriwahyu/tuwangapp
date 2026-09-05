@@ -8,6 +8,7 @@ function App() {
   const [messages, setMessages] = useState([
     { sender: 'bot', text: 'Halo! Cerita aja pemasukan/pengeluaran kamu'},
   ]);
+  const [chartPeriod, setChartPeriod] = useState('month');
 
   async function handleSend(text) {
     if (!text.trim()) return;
@@ -17,6 +18,10 @@ function App() {
     try {
       const data = await sendMessage(text);
       setMessages((prev) => [...prev, { sender: 'bot', text: data.reply }]);
+
+      if (data.period) {
+        setChartPeriod(data.period);
+      }
     } catch (err) {
       setMessages((prev) => [...prev, { sender: 'bot', text: 'Waduh, gagal connect ke server nich..' }]);
     }
@@ -24,13 +29,13 @@ function App() {
 
   return (
     <div>
-      <h1>Asisten Keuangan</h1>
+      <h1>Taktuntuwang</h1>
       {messages.map((msg, i) => (
         <ChatBubble key={i} sender={msg.sender} text={msg.text} />
       ))}
       <ChatInput onSend={handleSend} />
       <hr />
-      <SummaryChart />
+      <SummaryChart period={chartPeriod} />
     </div>
   );
 }
