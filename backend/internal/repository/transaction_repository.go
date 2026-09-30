@@ -11,16 +11,18 @@ import (
 )
 
 type transactionPayload struct {
+	UserID   string  `json:"user_id"`
 	Type     string  `json:"type"`
 	Amount   float64 `json:"amount"`
 	Category string  `json:"category"`
 }
 
-func SaveTransaction(txType string, amount float64, category string) error {
+func SaveTransaction(userID string, txType string, amount float64, category string) error {
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
 
 	payload := transactionPayload{
+		UserID:   userID,
 		Type:     txType,
 		Amount:   amount,
 		Category: category,
@@ -59,7 +61,7 @@ type transactionRow struct {
 	Amount float64 `json:"amount"`
 }
 
-func GetSummary(period string) (income float64, expense float64, err error) {
+func GetSummary(userID string, period string) (income float64, expense float64, err error) {
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
 

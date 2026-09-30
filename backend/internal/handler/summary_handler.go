@@ -9,9 +9,10 @@ import (
 )
 
 func GetSummaryHandler(c *gin.Context) {
+	userID := c.GetString("user_id")
 	period := c.DefaultQuery("period", "month")
 
-	income, expense, err := repository.GetSummary(period)
+	income, expense, err := repository.GetSummary(userID, period)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

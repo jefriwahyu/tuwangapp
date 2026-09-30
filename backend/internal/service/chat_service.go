@@ -7,7 +7,7 @@ import (
 	"tuwangapp/backend/internal/repository"
 )
 
-func ProcessMessage(req model.ChatRequest) model.ChatResponse {
+func ProcessMessage(userID string, req model.ChatRequest) model.ChatResponse {
 
 	extracted, err := ExtractTransaction(req.Message)
 	if err != nil {
@@ -17,14 +17,14 @@ func ProcessMessage(req model.ChatRequest) model.ChatResponse {
 
 	switch extracted.Intent {
 	case "transaction":
-		if err := repository.SaveTransaction(extracted.Type, extracted.Amount, extracted.Category); err != nil {
+		if err := repository.SaveTransaction(userID, extracted.Type, extracted.Amount, extracted.Category); err != nil {
 			log.Println("Gagal simpan transaksi:", err)
 			return model.ChatResponse{Reply: "Waduh, aku ngerti maksud kamu, tapi gagal nyimpen ke database."}
 		}
 		return model.ChatResponse{Reply: extracted.Reply}
 
 	case "query_report":
-		income, expense, err := repository.GetSummary(extracted.Period)
+		income, expense, err := repository.GetSummary(userID, extracted.Period)
 		if err != nil {
 			log.Println("Gagal ambil rekap:", err)
 			return model.ChatResponse{Reply: "Waduh, gagal ambil data rekap."}

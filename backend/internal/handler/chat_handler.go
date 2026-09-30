@@ -10,12 +10,14 @@ import (
 )
 
 func ChatHandler(c *gin.Context) {
+	userID := c.GetString("user_id")
+
 	var req model.ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp := service.ProcessMessage(req)
+	resp := service.ProcessMessage(userID, req)
 	c.JSON(http.StatusOK, resp)
 }
