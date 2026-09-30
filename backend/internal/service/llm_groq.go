@@ -49,7 +49,7 @@ Baca pesan user, tentukan apakah itu laporan transaksi (pemasukan/pengeluaran), 
   "type": "income" atau "expense" (kosongkan "" kalau intent bukan "transaction"),
   "amount": angka nominal dalam Rupiah (0 kalau intent bukan "transaction"),
   "category": kategori singkat, misal "Makanan", "Gaji", "Transportasi" (kosongkan "" kalau intent bukan "transaction"),
-  "period": "today" atau "month" atay "year" (kosongkan "" kalau bukanquery_report),
+  "period": "today" atau "yesterday" atau "week" atau "month" atau "year" (kosongkan "" kalau bukan query_report),
   "reply": balasan ramah dalam Bahasa Indonesia untuk ditampilkan ke user
 }
 

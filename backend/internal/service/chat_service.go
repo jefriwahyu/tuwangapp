@@ -46,6 +46,8 @@ func periodLabel(period string) string {
 		return "kemarin"
 	case "month":
 		return "bulan ini"
+	case "week":
+		return "7 hari terakhir"
 	case "year":
 		return "tahun ini"
 	default:

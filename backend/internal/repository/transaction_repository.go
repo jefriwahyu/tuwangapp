@@ -119,6 +119,11 @@ func periodRange(period string) (start, end string) {
 		y := now.AddDate(0, 0, -1)
 		startTime = time.Date(y.Year(), y.Month(), y.Day(), 0, 0, 0, 0, now.Location())
 		endTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	case "week":
+		// 7 hari terakhir termasuk hari ini: awal hari 6 hari lalu s/d sekarang.
+		weekAgo := now.AddDate(0, 0, -6)
+		startTime = time.Date(weekAgo.Year(), weekAgo.Month(), weekAgo.Day(), 0, 0, 0, 0, now.Location())
+		endTime = now
 	case "month":
 		startTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 		endTime = now
