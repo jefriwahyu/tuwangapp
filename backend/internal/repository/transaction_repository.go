@@ -73,6 +73,7 @@ func GetSummary(userID string, period string) (income float64, expense float64, 
 	}
 	q := u.Query()
 	q.Set("select", "type,amount")
+	q.Set("user_id", "eq."+userID)
 	q.Add("created_at", "gte."+startDate)
 	q.Add("created_at", "lt."+endDate)
 	u.RawQuery = q.Encode()
