@@ -4,6 +4,7 @@ import Login from './components/Login';
 import ChatBubble from './components/ChatBubble';
 import ChatInput from './components/ChatInput';
 import SummaryChart from './components/SummaryChart';
+import TransactionHistory from './components/TransactionHistory';
 import { sendMessage } from './api';
 
 function nowTime() {
@@ -172,6 +173,7 @@ function App() {
         {/* Insight panel */}
         <aside className="insight-panel">
           <SummaryChart period={chartPeriod} onPeriodChange={setChartPeriod} refreshKey={summaryKey} />
+          <TransactionHistory refreshKey={summaryKey} />
 
           <div className="insight-card howto">
             <h3>🚀 Cara pakai</h3>

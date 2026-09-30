@@ -35,4 +35,19 @@ export async function getSummary(period = 'month') {
     return res.json();
 }
 
+export async function getTransactions({ from = '', to = '', limit = 10, offset = 0 } = {}) {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    params.set('limit', String(limit));
+    params.set('offset', String(offset));
+    const res = await fetch(`${BASE_URL}/transactions?${params.toString()}`, {
+        headers: await authHeader(),
+    });
+    if (!res.ok) {
+        throw new Error('Gagal memuat riwayat');
+    }
+    return res.json();
+}
+
 export { authHeader };

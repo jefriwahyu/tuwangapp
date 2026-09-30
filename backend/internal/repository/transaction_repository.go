@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -57,8 +58,11 @@ func SaveTransaction(userID string, txType string, amount float64, category stri
 }
 
 type transactionRow struct {
-	Type   string  `json:"type"`
-	Amount float64 `json:"amount"`
+	ID        any     `json:"id"`
+	Type      string  `json:"type"`
+	Amount    float64 `json:"amount"`
+	Category  string  `json:"category"`
+	CreatedAt string  `json:"created_at"`
 }
 
 func GetSummary(userID string, period string) (income float64, expense float64, err error) {
@@ -108,6 +112,81 @@ func GetSummary(userID string, period string) (income float64, expense float64, 
 		}
 	}
 	return income, expense, nil
+}
+
+// ListFilter adalah parameter saring + paging untuk daftar transaksi.
+type ListFilter struct {
+	From   string // YYYY-MM-DD, opsional
+	To     string // YYYY-MM-DD, opsional (inklusif)
+	Limit  int
+	Offset int
+}
+
+// GetTransactions mengembalikan transaksi milik user, terbaru dulu,
+// opsional disaring rentang tanggal, dengan limit/offset.
+func GetTransactions(userID string, f ListFilter) ([]transactionRow, error) {
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
+
+	if f.Limit <= 0 {
+		f.Limit = 10
+	}
+	if f.Limit > 100 {
+		f.Limit = 100
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
+
+	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	q.Set("select", "id,type,amount,category,created_at")
+	q.Set("user_id", "eq."+userID)
+	if f.From != "" {
+		q.Add("created_at", "gte."+f.From+"T00:00:00+07:00")
+	}
+	if f.To != "" {
+		// Sampai akhir hari To: pakai lt awal hari berikutnya.
+		d, err := time.Parse("2006-01-02", f.To)
+		if err != nil {
+			return nil, fmt.Errorf("format to tidak valid (pakai YYYY-MM-DD)")
+		}
+		next := d.AddDate(0, 0, 1).Format("2006-01-02")
+		q.Add("created_at", "lt."+next+"T00:00:00+07:00")
+	}
+	q.Set("order", "created_at.desc")
+	q.Set("limit", strconv.Itoa(f.Limit))
+	q.Set("offset", strconv.Itoa(f.Offset))
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", serviceKey)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("supabase error: status %d", resp.StatusCode)
+	}
+
+	var rows []transactionRow
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		rows = []transactionRow{}
+	}
+	return rows, nil
 }
 
 func periodRange(period string) (start, end string) {

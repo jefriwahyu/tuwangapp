@@ -61,6 +61,7 @@ func main() {
 	{
 		protected.POST("/chat", handler.ChatHandler)
 		protected.GET("/summary", handler.GetSummaryHandler)
+		protected.GET("/transactions", handler.GetTransactionsHandler)
 	}
 
 	router.Run(":8080")
