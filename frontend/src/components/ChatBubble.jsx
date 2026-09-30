@@ -4,7 +4,7 @@ function formatTime(date = new Date()) {
   return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
 }
 
-function ChatBubble({ sender, text, time }) {
+function ChatBubble({ sender, text, time, confirmDelete, deleteDone, onConfirmDelete }) {
   const isUser = sender === 'user';
 
   return (
@@ -20,6 +20,23 @@ function ChatBubble({ sender, text, time }) {
       )}
       <div className={`bubble ${isUser ? 'bubble-user' : 'bubble-bot'}`}>
         <p className="bubble-text">{text}</p>
+        {confirmDelete?.length > 0 && (
+          <div className="bubble-confirm">
+            {confirmDelete.map((c) => (
+              <button
+                key={String(c.id)}
+                type="button"
+                className="bubble-confirm-btn"
+                onClick={() => onConfirmDelete?.(c.id)}
+              >
+                🗑️ {c.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {deleteDone && (
+          <p className="bubble-deleted">✅ Transaksi dihapus. Riwayat ikut diperbarui.</p>
+        )}
         <span className="bubble-time">
           {time || formatTime()}
           {isUser && (

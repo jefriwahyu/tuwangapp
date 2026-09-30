@@ -3,6 +3,7 @@ package repository
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -57,7 +58,7 @@ func SaveTransaction(userID string, txType string, amount float64, category stri
 	return nil
 }
 
-type transactionRow struct {
+type TransactionRow struct {
 	ID        any     `json:"id"`
 	Type      string  `json:"type"`
 	Amount    float64 `json:"amount"`
@@ -99,7 +100,7 @@ func GetSummary(userID string, period string) (income float64, expense float64, 
 		return 0, 0, fmt.Errorf("supabase error: status %d", resp.StatusCode)
 	}
 
-	var rows []transactionRow
+	var rows []TransactionRow
 	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
 		return 0, 0, err
 	}
@@ -124,7 +125,7 @@ type ListFilter struct {
 
 // GetTransactions mengembalikan transaksi milik user, terbaru dulu,
 // opsional disaring rentang tanggal, dengan limit/offset.
-func GetTransactions(userID string, f ListFilter) ([]transactionRow, error) {
+func GetTransactions(userID string, f ListFilter) ([]TransactionRow, error) {
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
 
@@ -179,14 +180,62 @@ func GetTransactions(userID string, f ListFilter) ([]transactionRow, error) {
 		return nil, fmt.Errorf("supabase error: status %d", resp.StatusCode)
 	}
 
-	var rows []transactionRow
+	var rows []TransactionRow
 	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
 		return nil, err
 	}
 	if rows == nil {
-		rows = []transactionRow{}
+		rows = []TransactionRow{}
 	}
 	return rows, nil
+}
+
+// ErrNotFound berarti baris tidak ada atau bukan milik user ini.
+var ErrNotFound = errors.New("transaksi tidak ditemukan")
+
+// DeleteTransaction menghapus satu transaksi milik user.
+// Filter ganda id + user_id mencegah user menghapus milik orang lain.
+func DeleteTransaction(userID string, id string) error {
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
+
+	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
+	if err != nil {
+		return err
+	}
+	q := u.Query()
+	q.Set("id", "eq."+id)
+	q.Set("user_id", "eq."+userID)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodDelete, u.String(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", serviceKey)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	req.Header.Set("Prefer", "return=representation")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("supabase error: status %d", resp.StatusCode)
+	}
+
+	// Dengan Prefer return=representation, Supabase mengembalikan
+	// baris yang terhapus. Kosong = id tidak ada / bukan milik user.
+	var deleted []TransactionRow
+	if err := json.NewDecoder(resp.Body).Decode(&deleted); err != nil {
+		return err
+	}
+	if len(deleted) == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func periodRange(period string) (start, end string) {

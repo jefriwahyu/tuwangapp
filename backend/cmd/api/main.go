@@ -48,7 +48,7 @@ func main() {
 
 	router.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"http://localhost:5173"},
-		AllowMethods: []string{"GET", "POST"},
+		AllowMethods: []string{"GET", "POST", "DELETE"},
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	}))
 
@@ -62,6 +62,7 @@ func main() {
 		protected.POST("/chat", handler.ChatHandler)
 		protected.GET("/summary", handler.GetSummaryHandler)
 		protected.GET("/transactions", handler.GetTransactionsHandler)
+		protected.DELETE("/transactions/:id", handler.DeleteTransactionHandler)
 	}
 
 	router.Run(":8080")

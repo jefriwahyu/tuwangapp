@@ -50,4 +50,18 @@ export async function getTransactions({ from = '', to = '', limit = 10, offset =
     return res.json();
 }
 
+export async function deleteTransaction(id) {
+    const res = await fetch(`${BASE_URL}/transactions/${id}`, {
+        method: 'DELETE',
+        headers: await authHeader(),
+    });
+    if (res.status === 404) {
+        throw new Error('Transaksi tidak ditemukan');
+    }
+    if (!res.ok) {
+        throw new Error('Gagal menghapus transaksi');
+    }
+    return res.json();
+}
+
 export { authHeader };

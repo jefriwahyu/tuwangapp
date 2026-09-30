@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getTransactions } from '../api';
+import { deleteTransaction, getTransactions } from '../api';
 
 const PAGE_SIZE = 10;
 
@@ -20,7 +20,7 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function TransactionHistory({ refreshKey }) {
+function TransactionHistory({ refreshKey, onChanged }) {
   const [to, setTo] = useState(todayStr());
   const [from, setFrom] = useState('');
   const [applied, setApplied] = useState({ from: '', to: '' });
@@ -29,6 +29,7 @@ function TransactionHistory({ refreshKey }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   async function load(reset, filter) {
     const f = filter || applied;
@@ -81,6 +82,21 @@ function TransactionHistory({ refreshKey }) {
     setFrom(f.from);
     setTo(f.to);
     setApplied(f);
+  }
+
+  async function handleDelete(tx) {
+    const label = `${tx.category || (tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')} ${formatRp(tx.amount)}`;
+    if (!window.confirm(`Yakin hapus ${label}?`)) return;
+    setDeletingId(tx.id);
+    try {
+      await deleteTransaction(tx.id);
+      setItems((prev) => prev.filter((row) => row.id !== tx.id));
+      if (onChanged) onChanged();
+    } catch (err) {
+      window.alert(err.message || 'Gagal menghapus transaksi');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -138,6 +154,15 @@ function TransactionHistory({ refreshKey }) {
                 <strong className={tx.type === 'income' ? 'tx-amount in' : 'tx-amount out'}>
                   {tx.type === 'income' ? '+' : '-'}{formatRp(tx.amount)}
                 </strong>
+                <button
+                  type="button"
+                  className="tx-del"
+                  title="Hapus transaksi"
+                  onClick={() => handleDelete(tx)}
+                  disabled={deletingId === tx.id}
+                >
+                  🗑️
+                </button>
               </li>
             ))}
           </ul>

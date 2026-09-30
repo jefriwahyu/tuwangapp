@@ -5,7 +5,7 @@ import ChatBubble from './components/ChatBubble';
 import ChatInput from './components/ChatInput';
 import SummaryChart from './components/SummaryChart';
 import TransactionHistory from './components/TransactionHistory';
-import { sendMessage } from './api';
+import { deleteTransaction, sendMessage } from './api';
 
 function nowTime() {
   return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
@@ -56,12 +56,17 @@ function App() {
 
     try {
       const data = await sendMessage(text);
-      setMessages((prev) => [...prev, {
+      const botMsg = {
         id: Date.now() + 1,
         sender: 'bot',
         text: data.reply || 'Oke, sudah kucatat! ✅',
         time: nowTime(),
-      }]);
+      };
+      // Kartu konfirmasi hapus: tombol di dalam bubble chat.
+      if (data.action === 'confirm_delete' && data.candidates?.length) {
+        botMsg.confirmDelete = data.candidates;
+      }
+      setMessages((prev) => [...prev, botMsg]);
       if (data.period) setChartPeriod(data.period);
       setSummaryKey((k) => k + 1);
     } catch (err) {
@@ -73,6 +78,26 @@ function App() {
       }]);
     } finally {
       setIsTyping(false);
+    }
+  }
+
+  async function handleConfirmDelete(msgId, txId) {
+    try {
+      await deleteTransaction(txId);
+      // Tandai kandidat terhapus, kunci sisa tombol di kartu yang sama.
+      setMessages((prev) => prev.map((m) => {
+        if (m.id !== msgId) return m;
+        const rest = (m.confirmDelete || []).filter((c) => String(c.id) !== String(txId));
+        return { ...m, confirmDelete: rest, deleteDone: true };
+      }));
+      setSummaryKey((k) => k + 1);
+    } catch (err) {
+      setMessages((prev) => [...prev, {
+        id: Date.now() + 2,
+        sender: 'bot',
+        text: err.message || 'Gagal menghapus transaksi.',
+        time: nowTime(),
+      }]);
     }
   }
 
@@ -139,7 +164,15 @@ function App() {
 
           <div className="chat-messages" ref={scrollRef}>
             {messages.map((msg) => (
-              <ChatBubble key={msg.id || msg.text} sender={msg.sender} text={msg.text} time={msg.time} />
+              <ChatBubble
+                key={msg.id || msg.text}
+                sender={msg.sender}
+                text={msg.text}
+                time={msg.time}
+                confirmDelete={msg.confirmDelete}
+                deleteDone={msg.deleteDone}
+                onConfirmDelete={(txId) => handleConfirmDelete(msg.id, txId)}
+              />
             ))}
             {isTyping && (
               <div className="bubble-row bot">
@@ -173,7 +206,7 @@ function App() {
         {/* Insight panel */}
         <aside className="insight-panel">
           <SummaryChart period={chartPeriod} onPeriodChange={setChartPeriod} refreshKey={summaryKey} />
-          <TransactionHistory refreshKey={summaryKey} />
+          <TransactionHistory refreshKey={summaryKey} onChanged={() => setSummaryKey((k) => k + 1)} />
 
           <div className="insight-card howto">
             <h3>🚀 Cara pakai</h3>

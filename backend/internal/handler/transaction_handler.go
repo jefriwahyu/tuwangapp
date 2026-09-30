@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -28,4 +29,25 @@ func GetTransactionsHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": rows})
+}
+
+// DELETE /api/v1/transactions/:id
+func DeleteTransactionHandler(c *gin.Context) {
+	userID := c.GetString("user_id")
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id wajib diisi"})
+		return
+	}
+
+	if err := repository.DeleteTransaction(userID, id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "transaksi tidak ditemukan"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "transaksi dihapus"})
 }
