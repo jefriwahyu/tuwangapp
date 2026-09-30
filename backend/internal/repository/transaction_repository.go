@@ -10,24 +10,28 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"tuwangapp/backend/internal/category"
 )
 
 type transactionPayload struct {
-	UserID   string  `json:"user_id"`
-	Type     string  `json:"type"`
-	Amount   float64 `json:"amount"`
-	Category string  `json:"category"`
+	UserID      string  `json:"user_id"`
+	Type        string  `json:"type"`
+	Amount      float64 `json:"amount"`
+	Category    string  `json:"category"`
+	Description string  `json:"description"`
 }
 
-func SaveTransaction(userID string, txType string, amount float64, category string) error {
+func SaveTransaction(userID string, txType string, amount float64, category string, description string) error {
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
 
 	payload := transactionPayload{
-		UserID:   userID,
-		Type:     txType,
-		Amount:   amount,
-		Category: category,
+		UserID:      userID,
+		Type:        txType,
+		Amount:      amount,
+		Category:    category,
+		Description: description,
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -59,11 +63,12 @@ func SaveTransaction(userID string, txType string, amount float64, category stri
 }
 
 type TransactionRow struct {
-	ID        any     `json:"id"`
-	Type      string  `json:"type"`
-	Amount    float64 `json:"amount"`
-	Category  string  `json:"category"`
-	CreatedAt string  `json:"created_at"`
+	ID          any     `json:"id"`
+	Type        string  `json:"type"`
+	Amount      float64 `json:"amount"`
+	Category    string  `json:"category"`
+	Description string  `json:"description"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 func GetSummary(userID string, period string) (income float64, expense float64, err error) {
@@ -115,6 +120,75 @@ func GetSummary(userID string, period string) (income float64, expense float64, 
 	return income, expense, nil
 }
 
+// CategoryBreakdown adalah total per (type, category) untuk satu periode.
+type CategoryBreakdown struct {
+	Category string  `json:"category"`
+	Type     string  `json:"type"`
+	Total    float64 `json:"total"`
+}
+
+// GetCategoryBreakdown mengelompokkan total per kategori milik user ini.
+// Agregasi di Go (seperti GetSummary) supaya konsisten dan tetap KISS.
+func GetCategoryBreakdown(userID string, period string) ([]CategoryBreakdown, error) {
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
+
+	startDate, endDate := periodRange(period)
+
+	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	q.Set("select", "type,category,amount")
+	q.Set("user_id", "eq."+userID)
+	q.Add("created_at", "gte."+startDate)
+	q.Add("created_at", "lt."+endDate)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", serviceKey)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("supabase error: status %d", resp.StatusCode)
+	}
+
+	var rows []TransactionRow
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, err
+	}
+
+	grouped := map[string]*CategoryBreakdown{}
+	order := []string{}
+	for _, row := range rows {
+		// Normalisasi di baca juga: data lama yang kategorinya bebas
+		// ikut dipetakan ke daftar kanonis, kosong = Lainnya.
+		cat := category.Normalize(row.Category)
+		key := row.Type + "|" + cat
+		if g, ok := grouped[key]; ok {
+			g.Total += row.Amount
+		} else {
+			grouped[key] = &CategoryBreakdown{Category: cat, Type: row.Type, Total: row.Amount}
+			order = append(order, key)
+		}
+	}
+	out := make([]CategoryBreakdown, 0, len(order))
+	for _, k := range order {
+		out = append(out, *grouped[k])
+	}
+	return out, nil
+}
+
 // ListFilter adalah parameter saring + paging untuk daftar transaksi.
 type ListFilter struct {
 	From   string // YYYY-MM-DD, opsional
@@ -144,7 +218,7 @@ func GetTransactions(userID string, f ListFilter) ([]TransactionRow, error) {
 		return nil, err
 	}
 	q := u.Query()
-	q.Set("select", "id,type,amount,category,created_at")
+	q.Set("select", "id,type,amount,category,description,created_at")
 	q.Set("user_id", "eq."+userID)
 	if f.From != "" {
 		q.Add("created_at", "gte."+f.From+"T00:00:00+07:00")

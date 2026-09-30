@@ -85,7 +85,7 @@ function TransactionHistory({ refreshKey, onChanged }) {
   }
 
   async function handleDelete(tx) {
-    const label = `${tx.category || (tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')} ${formatRp(tx.amount)}`;
+    const label = `${tx.description || tx.category || (tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')} ${formatRp(tx.amount)}`;
     if (!window.confirm(`Yakin hapus ${label}?`)) return;
     setDeletingId(tx.id);
     try {
@@ -148,8 +148,10 @@ function TransactionHistory({ refreshKey, onChanged }) {
               <li key={tx.id} className="tx-item">
                 <span className="tx-icon">{tx.type === 'income' ? '💰' : '💸'}</span>
                 <div className="tx-main">
-                  <strong className="tx-cat">{tx.category || (tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')}</strong>
-                  <span className="tx-date">{formatDate(tx.created_at)}</span>
+                  <strong className="tx-cat">{tx.description || tx.category || (tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')}</strong>
+                  <span className="tx-date">
+                    {tx.description && tx.category ? `${tx.category} • ` : ''}{formatDate(tx.created_at)}
+                  </span>
                 </div>
                 <strong className={tx.type === 'income' ? 'tx-amount in' : 'tx-amount out'}>
                   {tx.type === 'income' ? '+' : '-'}{formatRp(tx.amount)}

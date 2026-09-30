@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"tuwangapp/backend/internal/category"
 	"tuwangapp/backend/internal/model"
 	"tuwangapp/backend/internal/repository"
 )
@@ -19,7 +20,9 @@ func ProcessMessage(userID string, req model.ChatRequest) model.ChatResponse {
 
 	switch extracted.Intent {
 	case "transaction":
-		if err := repository.SaveTransaction(userID, extracted.Type, extracted.Amount, extracted.Category); err != nil {
+		cleanCategory := category.Normalize(extracted.Category)
+		desc := sanitizeDescription(extracted.Description)
+		if err := repository.SaveTransaction(userID, extracted.Type, extracted.Amount, cleanCategory, desc); err != nil {
 			log.Println("Gagal simpan transaksi:", err)
 			return model.ChatResponse{Reply: "Waduh, aku ngerti maksud kamu, tapi gagal nyimpen ke database."}
 		}
@@ -43,6 +46,31 @@ func ProcessMessage(userID string, req model.ChatRequest) model.ChatResponse {
 	default: // chitchat
 		return model.ChatResponse{Reply: extracted.Reply}
 	}
+}
+
+// sanitizeDescription merapikan teks bebas dari LLM: spasi ganda
+// dibuang, maksimal 60 karakter supaya tidak jadi paragraf.
+func sanitizeDescription(raw string) string {
+	desc := strings.Join(strings.Fields(raw), " ")
+	if len([]rune(desc)) > 60 {
+		desc = string([]rune(desc)[:60])
+	}
+	return desc
+}
+
+// displayName memilih teks utama sebuah baris transaksi:
+// description kalau ada, category untuk data lama, terakhir jenisnya.
+func displayName(desc string, cat string, txType string) string {
+	if desc != "" {
+		return desc
+	}
+	if cat != "" {
+		return cat
+	}
+	if txType == "income" {
+		return "Pemasukan"
+	}
+	return "Pengeluaran"
 }
 
 // handleDeleteIntent mencari kandidat milik user ini saja lalu
@@ -83,7 +111,8 @@ func handleDeleteIntent(userID string, target string) model.ChatResponse {
 
 // matchDeleteCandidates mencocokkan target ke 10 transaksi terbaru.
 // Target kosong/"yang tadi" = baris terbaru. Selain itu, tiap kata di
-// target harus muncul di gabungan category + amount (case-insensitive).
+// target harus muncul di gabungan description + category + amount
+// (case-insensitive).
 func matchDeleteCandidates(rows []repository.TransactionRow, target string) []model.DeleteCandidate {
 	lower := strings.ToLower(target)
 	if lower == "" || lower == "yang tadi" || lower == "terakhir" || lower == "itu" {
@@ -93,7 +122,7 @@ func matchDeleteCandidates(rows []repository.TransactionRow, target string) []mo
 	words := strings.Fields(lower)
 	var out []model.DeleteCandidate
 	for _, row := range rows {
-		haystack := strings.ToLower(row.Category + " " + fmt.Sprintf("%.0f", row.Amount))
+		haystack := strings.ToLower(row.Description + " " + row.Category + " " + fmt.Sprintf("%.0f", row.Amount))
 		matched := true
 		for _, w := range words {
 			if !strings.Contains(haystack, w) {
@@ -116,18 +145,16 @@ func toDeleteCandidate(row repository.TransactionRow) model.DeleteCandidate {
 	if row.Type == "income" {
 		kind = "Pemasukan"
 	}
-	name := row.Category
-	if name == "" {
-		name = kind
-	}
+	name := displayName(row.Description, row.Category, row.Type)
 	label := fmt.Sprintf("%s %s Rp%.0f (%s)", kind, name, row.Amount, formatShortDate(row.CreatedAt))
 	return model.DeleteCandidate{
-		ID:        row.ID,
-		Type:      row.Type,
-		Category:  row.Category,
-		Amount:    row.Amount,
-		CreatedAt: row.CreatedAt,
-		Label:     label,
+		ID:          row.ID,
+		Type:        row.Type,
+		Category:    row.Category,
+		Description: row.Description,
+		Amount:      row.Amount,
+		CreatedAt:   row.CreatedAt,
+		Label:       label,
 	}
 }
 

@@ -36,6 +36,51 @@ function SummaryChart({ period, onPeriodChange, refreshKey }) {
   const income = summary?.income || 0;
   const expense = summary?.expense || 0;
   const balance = income - expense;
+  const breakdown = (summary?.breakdown || []).filter((b) => b.type === 'expense' && b.total > 0);
+  const catLabels = breakdown.map((b) => b.category);
+  const catTotals = breakdown.map((b) => b.total);
+
+  const palette = ['#10b981', '#f59e0b', '#38bdf8', '#a78bfa', '#f472b6', '#facc15', '#34d399', '#fb7185', '#60a5fa', '#a3e635', '#fbbf24', '#2dd4bf'];
+
+  const catData = {
+    labels: catLabels,
+    datasets: [
+      {
+        label: 'Pengeluaran',
+        data: catTotals,
+        backgroundColor: catLabels.map((_, i) => palette[i % palette.length]),
+        borderRadius: 8,
+      },
+    ],
+  };
+
+  const catOptions = {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: { label: (ctx) => ` ${formatRp(ctx.raw)}` },
+      },
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        ticks: {
+          callback: (v) => v >= 1000000 ? `${v / 1000000}jt` : v >= 1000 ? `${v / 1000}rb` : v,
+          font: { size: 11 },
+          color: '#94a3b8',
+          maxTicksLimit: 5,
+        },
+        grid: { color: 'rgba(148,163,184,0.15)' },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { font: { size: 12 }, color: '#334155', autoSkip: false },
+      },
+    },
+  };
 
   const chartData = {
     labels: ['Keuangan'],
@@ -137,6 +182,14 @@ function SummaryChart({ period, onPeriodChange, refreshKey }) {
           <div className="insight-chart">
             <Bar data={chartData} options={chartOptions} />
           </div>
+          {breakdown.length > 0 && (
+            <>
+              <h4 className="insight-subtitle">Pengeluaran per kategori</h4>
+              <div className="insight-chart insight-chart-cat">
+                <Bar data={catData} options={catOptions} />
+              </div>
+            </>
+          )}
           <p className="insight-tip">
             💡 Tips: ketik <code>rekap bulan ini</code> di chat untuk update otomatis.
           </p>

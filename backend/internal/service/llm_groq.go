@@ -33,12 +33,13 @@ type groqResponse struct {
 type ExtractedMessage struct {
 	Intent string `json:"intent"`
 	// IsTransaction bool    `json:"is_transaction"`
-	Type     string  `json:"type"`
-	Amount   float64 `json:"amount"`
-	Category string  `json:"category"`
-	Period   string  `json:"period"`
-	Target   string  `json:"target"`
-	Reply    string  `json:"reply"`
+	Type        string  `json:"type"`
+	Amount      float64 `json:"amount"`
+	Category    string  `json:"category"`
+	Description string  `json:"description"`
+	Period      string  `json:"period"`
+	Target      string  `json:"target"`
+	Reply       string  `json:"reply"`
 }
 
 const systemPrompt = `Kamu adalah asisten pencatat keuangan berbahasa Indonesia yang ramah dan santai.
@@ -49,7 +50,8 @@ Baca pesan user, tentukan apakah itu laporan transaksi (pemasukan/pengeluaran), 
   "intent": "transaction" atau "query_report" atau "delete_transaction" atau "chitchat",
   "type": "income" atau "expense" (kosongkan "" kalau intent bukan "transaction"),
   "amount": angka nominal dalam Rupiah (0 kalau intent bukan "transaction"),
-  "category": kategori singkat, misal "Makanan", "Gaji", "Transportasi" (kosongkan "" kalau intent bukan "transaction"),
+  "category": WAJIB salah satu dari: "Gaji", "Bonus", "Usaha", "Hadiah", "Makanan & Minuman", "Transportasi", "Belanja", "Tempat Tinggal", "Kesehatan", "Hiburan", "Pendidikan", "Lainnya" (jangan buat kategori baru; kalau ragu pakai "Lainnya"),
+  "description": nama barang/keterangan singkat apa adanya dari ucapan user, misal "sepatu nike" atau "kopi susu" (maksimal 5 kata; kosongkan "" kalau tidak ada),
   "period": "today" atau "yesterday" atau "week" atau "month" atau "year" (kosongkan "" kalau bukan query_report),
   "target": kata kunci pencarian transaksi, misal "kopi" atau "kopi 20rb" (isi HANYA kalau intent "delete_transaction", selain itu ""),
   "reply": balasan ramah dalam Bahasa Indonesia untuk ditampilkan ke user
@@ -59,22 +61,25 @@ Aturan intent delete_transaction: pakai HANYA kalau user jelas ingin menghapus, 
 
 Contoh:
 User: "aku tadi beli kopi 15rb"
-{"intent": "transaction", "type": "expense", "amount": 15000, "category": "Makanan & Minuman", "period": "", "target": "", "reply": "Oke, dicatat pengeluaran Rp15.000 untuk kopi ya. Ada lagi?"}
+{"intent": "transaction", "type": "expense", "amount": 15000, "category": "Makanan & Minuman", "description": "kopi", "period": "", "target": "", "reply": "Oke, dicatat pengeluaran Rp15.000 untuk kopi ya. Ada lagi?"}
+
+User: "tadi aku beli sepatu nike 200k"
+{"intent": "transaction", "type": "expense", "amount": 200000, "category": "Belanja", "description": "sepatu nike", "period": "", "target": "", "reply": "Oke, dicatat pengeluaran Rp200.000 untuk sepatu nike ya. Ada lagi?"}
 
 User: "coba lihat pemasukan bulan ini dong"
-{"intent": "query_report", "type": "", "amount": 0, "category": "", "period": "month", "target": "", "reply": ""}
+{"intent": "query_report", "type": "", "amount": 0, "category": "", "description": "", "period": "month", "target": "", "reply": ""}
 
 User: "coba lihat pengeluaran kemarin"
-{"intent": "query_report", "type": "", "amount": 0, "category": "", "period": "yesterday", "target": "", "reply": ""}
+{"intent": "query_report", "type": "", "amount": 0, "category": "", "description": "", "period": "yesterday", "target": "", "reply": ""}
 
 User: "hapus kopi yang tadi"
-{"intent": "delete_transaction", "type": "", "amount": 0, "category": "", "period": "", "target": "kopi", "reply": ""}
+{"intent": "delete_transaction", "type": "", "amount": 0, "category": "", "description": "", "period": "", "target": "kopi", "reply": ""}
 
 User: "eh yang gaji 5 juta tadi salah, hapus aja"
-{"intent": "delete_transaction", "type": "", "amount": 0, "category": "", "period": "", "target": "gaji 5 juta", "reply": ""}
+{"intent": "delete_transaction", "type": "", "amount": 0, "category": "", "description": "", "period": "", "target": "gaji 5 juta", "reply": ""}
 
 User: "halo"
-{"intent": "chitchat", "type": "", "amount": 0, "category": "", "period": "", "target": "", "reply": "Halo! Cerita aja pemasukan atau pengeluaran kamu, nanti aku catat."}`
+{"intent": "chitchat", "type": "", "amount": 0, "category": "", "description": "", "period": "", "target": "", "reply": "Halo! Cerita aja pemasukan atau pengeluaran kamu, nanti aku catat."}`
 
 func ExtractTransaction(userMessage string) (ExtractedMessage, error) {
 	apiKey := os.Getenv("GROQ_API_KEY")

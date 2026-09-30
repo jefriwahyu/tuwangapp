@@ -14,10 +14,11 @@ type ChatResponse struct {
 // DeleteCandidate adalah satu transaksi kandidat hapus yang
 // ditampilkan sebagai tombol konfirmasi di chat.
 type DeleteCandidate struct {
-	ID        any     `json:"id"`
-	Type      string  `json:"type"`
-	Category  string  `json:"category"`
-	Amount    float64 `json:"amount"`
-	CreatedAt string  `json:"created_at"`
-	Label     string  `json:"label"`
+	ID          any     `json:"id"`
+	Type        string  `json:"type"`
+	Category    string  `json:"category"`
+	Description string  `json:"description"`
+	Amount      float64 `json:"amount"`
+	CreatedAt   string  `json:"created_at"`
+	Label       string  `json:"label"`
 }
