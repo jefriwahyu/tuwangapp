@@ -19,7 +19,7 @@ function formatRp(n) {
   }).format(n || 0);
 }
 
-function SummaryChart({ period, onPeriodChange, refreshKey }) {
+function SummaryChart({ period, onPeriodChange, refreshKey, liveSnapshot }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -32,6 +32,19 @@ function SummaryChart({ period, onPeriodChange, refreshKey }) {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [period, refreshKey]);
+
+  // Tempel ringkasan inline dari respons chat — tanpa fetch ulang.
+  // Pola "adjust state saat props berubah": hanya dijalankan saat seq
+  // baru datang dan periodenya cocok, supaya tiap respons diterapkan
+  // walau angkanya sama, dan periode beda diabaikan.
+  const [appliedSeq, setAppliedSeq] = useState(0);
+  if (liveSnapshot?.summary
+    && liveSnapshot.seq > appliedSeq
+    && liveSnapshot.summary.period === period) {
+    setAppliedSeq(liveSnapshot.seq);
+    setSummary(liveSnapshot.summary);
+    setLoading(false);
+  }
 
   const income = summary?.income || 0;
   const expense = summary?.expense || 0;

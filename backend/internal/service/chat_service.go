@@ -20,13 +20,7 @@ func ProcessMessage(userID string, req model.ChatRequest) model.ChatResponse {
 
 	switch extracted.Intent {
 	case "transaction":
-		cleanCategory := category.Normalize(extracted.Category)
-		desc := sanitizeDescription(extracted.Description)
-		if err := repository.SaveTransaction(userID, extracted.Type, extracted.Amount, cleanCategory, desc); err != nil {
-			log.Println("Gagal simpan transaksi:", err)
-			return model.ChatResponse{Reply: "Waduh, aku ngerti maksud kamu, tapi gagal nyimpen ke database."}
-		}
-		return model.ChatResponse{Reply: extracted.Reply}
+		return handleTransactionIntent(userID, req.Period, extracted)
 
 	case "query_report":
 		income, expense, err := repository.GetSummary(userID, extracted.Period)
@@ -34,17 +28,140 @@ func ProcessMessage(userID string, req model.ChatRequest) model.ChatResponse {
 			log.Println("Gagal ambil rekap:", err)
 			return model.ChatResponse{Reply: "Waduh, gagal ambil data rekap."}
 		}
+		breakdown, err := repository.GetCategoryBreakdown(userID, extracted.Period)
+		if err != nil {
+			log.Println("Gagal ambil breakdown:", err)
+			breakdown = nil
+		}
 		reply := fmt.Sprintf(
 			"Rekap %s:\nPemasukan: Rp%.0f\nPengeluaran: Rp%.0f",
 			periodLabel(extracted.Period), income, expense,
 		)
-		return model.ChatResponse{Reply: reply, Period: extracted.Period}
+		return model.ChatResponse{
+			Reply:  reply,
+			Period: extracted.Period,
+			Summary: &model.SummarySnapshot{
+				Period:    extracted.Period,
+				Income:    income,
+				Expense:   expense,
+				Breakdown: breakdown,
+			},
+		}
 
 	case "delete_transaction":
 		return handleDeleteIntent(userID, extracted.Target)
 
 	default: // chitchat
 		return model.ChatResponse{Reply: extracted.Reply}
+	}
+}
+
+// maxTransactionsPerMessage membatasi satu pesan ke maksimal 5 transaksi.
+// Lebih dari itu hampir pasti LLM mengarang — potong, jangan tolak.
+const maxTransactionsPerMessage = 5
+
+// handleTransactionIntent menyimpan 1..5 item dari satu pesan chat.
+// Tiap item divalidasi sendiri (type income/expense, amount > 0):
+// item invalid dilewati tanpa menggagalkan yang valid.
+// Ringkasan segar untuk periode aktif ikut dikembalikan supaya
+// chart langsung update tanpa fetch ulang.
+func handleTransactionIntent(userID string, activePeriod string, extracted ExtractedMessage) model.ChatResponse {
+	items := extracted.Transactions
+	if len(items) == 0 {
+		// Fallback respons model lama yang masih pakai field tunggal.
+		if extracted.Amount > 0 || extracted.Type != "" || extracted.Category != "" || extracted.Description != "" {
+			items = []TransactionItem{{
+				Type:        extracted.Type,
+				Amount:      extracted.Amount,
+				Category:    extracted.Category,
+				Description: extracted.Description,
+			}}
+		}
+	}
+	if len(items) > maxTransactionsPerMessage {
+		items = items[:maxTransactionsPerMessage]
+	}
+	if len(items) == 0 {
+		return model.ChatResponse{Reply: "Nominalnya berapa? Sebutkan angkanya, misal \"kopi 15rb\"."}
+	}
+
+	var valid []TransactionItem
+	for _, it := range items {
+		t := strings.ToLower(strings.TrimSpace(it.Type))
+		if t != "income" && t != "expense" {
+			continue
+		}
+		if it.Amount <= 0 {
+			continue
+		}
+		valid = append(valid, TransactionItem{
+			Type:        t,
+			Amount:      it.Amount,
+			Category:    category.Normalize(it.Category),
+			Description: sanitizeDescription(it.Description),
+		})
+	}
+	if len(valid) == 0 {
+		return model.ChatResponse{Reply: "Waduh, nominalnya nggak kebaca. Coba tulis lagi, misal \"kopi 15rb\"."}
+	}
+	if len(valid) < len(items) {
+		log.Printf("Sebagian item ditolak validasi (%d dari %d)", len(valid), len(items))
+	}
+
+	for _, v := range valid {
+		if err := repository.SaveTransaction(userID, v.Type, v.Amount, v.Category, v.Description); err != nil {
+			log.Println("Gagal simpan transaksi:", err)
+			return model.ChatResponse{Reply: "Waduh, aku ngerti maksud kamu, tapi gagal nyimpen ke database."}
+		}
+	}
+
+	reply := extracted.Reply
+	if len(valid) > 1 {
+		reply = multiReply(valid)
+	}
+
+	return model.ChatResponse{
+		Reply:      reply,
+		Summary:    freshSummary(userID, activePeriod),
+		SavedCount: len(valid),
+	}
+}
+
+// multiReply membangun balasan dari data valid (backend sumber kebenaran).
+// LLM kadang hanya menyebut item pertama — daftar ini selalu lengkap.
+func multiReply(valid []TransactionItem) string {
+	parts := make([]string, 0, len(valid))
+	for _, v := range valid {
+		name := displayName(v.Description, v.Category, v.Type)
+		parts = append(parts, fmt.Sprintf("%s Rp%.0f", name, v.Amount))
+	}
+	return fmt.Sprintf("Tercatat %d transaksi: %s. Ada lagi?", len(valid), strings.Join(parts, ", "))
+}
+
+// freshSummary mengambil angka terbaru untuk periode aktif.
+// Gagal = nil — frontend mengabaikannya dan tetap pakai jalur fetch biasa.
+func freshSummary(userID string, activePeriod string) *model.SummarySnapshot {
+	period := activePeriod
+	switch period {
+	case "today", "yesterday", "week", "month", "year":
+	default:
+		period = "month"
+	}
+	income, expense, err := repository.GetSummary(userID, period)
+	if err != nil {
+		log.Println("Gagal ambil ringkasan inline:", err)
+		return nil
+	}
+	breakdown, err := repository.GetCategoryBreakdown(userID, period)
+	if err != nil {
+		log.Println("Gagal ambil breakdown inline:", err)
+		breakdown = nil
+	}
+	return &model.SummarySnapshot{
+		Period:    period,
+		Income:    income,
+		Expense:   expense,
+		Breakdown: breakdown,
 	}
 }
 

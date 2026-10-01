@@ -27,6 +27,9 @@ function App() {
   const [isTyping, setIsTyping] = useState(false);
   const [chartPeriod, setChartPeriod] = useState('month');
   const [summaryKey, setSummaryKey] = useState(0);
+  // Ringkasan inline dari respons chat + nomor urutnya.
+  const [liveSummary, setLiveSummary] = useState(null);
+  const liveSeq = useRef(0);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -55,7 +58,9 @@ function App() {
     setIsTyping(true);
 
     try {
-      const data = await sendMessage(text);
+      // Kirim periode aktif chart supaya ringkasan inline dari backend
+      // cocok dengan yang sedang dilihat user.
+      const data = await sendMessage(text, chartPeriod);
       const botMsg = {
         id: Date.now() + 1,
         sender: 'bot',
@@ -68,6 +73,13 @@ function App() {
       }
       setMessages((prev) => [...prev, botMsg]);
       if (data.period) setChartPeriod(data.period);
+      // Tempel ringkasan inline ke chart — tanpa fetch ulang.
+      // Periode query_report ikut data.period, transaksi pakai periode aktif.
+      const summaryPeriod = data.period || chartPeriod;
+      if (data.summary && data.summary.period === summaryPeriod) {
+        liveSeq.current += 1;
+        setLiveSummary({ summary: data.summary, seq: liveSeq.current });
+      }
       setSummaryKey((k) => k + 1);
     } catch (err) {
       setMessages((prev) => [...prev, {
@@ -205,7 +217,7 @@ function App() {
 
         {/* Insight panel */}
         <aside className="insight-panel">
-          <SummaryChart period={chartPeriod} onPeriodChange={setChartPeriod} refreshKey={summaryKey} />
+          <SummaryChart period={chartPeriod} onPeriodChange={setChartPeriod} refreshKey={summaryKey} liveSnapshot={liveSummary} />
           <TransactionHistory refreshKey={summaryKey} onChanged={() => setSummaryKey((k) => k + 1)} />
 
           <div className="insight-card howto">
@@ -213,6 +225,7 @@ function App() {
             <ol>
               <li>Ketik <b>"Gaji 5 juta"</b> untuk pemasukan</li>
               <li>Ketik <b>"Beli kopi 20rb"</b> untuk pengeluaran</li>
+              <li>Ketik <b>"kopi 10k, parkir 5rb"</b> untuk catat 2 sekaligus</li>
               <li>Ketik <b>"Rekap minggu ini"</b> untuk ringkasan</li>
             </ol>
           </div>

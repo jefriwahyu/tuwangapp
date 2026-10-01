@@ -8,14 +8,14 @@ async function authHeader() {
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-export async function sendMessage(text) {
+export async function sendMessage(text, period = '') {
     const res = await fetch(`${BASE_URL}/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             ...(await authHeader())
         },
-        body: JSON.stringify({ message:text }),
+        body: JSON.stringify({ message: text, period }),
     });
 
     if (!res.ok) {
