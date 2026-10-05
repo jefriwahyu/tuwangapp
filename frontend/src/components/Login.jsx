@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 
 function Login() {
   const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -18,12 +19,18 @@ function Login() {
     setSuccessMsg('');
 
     if (!email.trim() || !password.trim()) {
-      setErrorMsg('Email dan password wajib diisi ya.');
+      setErrorMsg('Email dan kata sandi wajib diisi dengan benar.');
       return;
     }
-    if (password.length < 6) {
-      setErrorMsg('Password minimal 6 karakter.');
-      return;
+    if (!isLogin) {
+      if (!name.trim()) {
+        setErrorMsg('Nama lengkap wajib diisi.');
+        return;
+      }
+      if (password.length < 8) {
+        setErrorMsg('Kata sandi minimal 8 karakter.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -32,13 +39,36 @@ function Login() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { data: { display_name: name.trim() } },
+        });
         if (error) throw error;
-        setSuccessMsg('Akun berhasil dibuat! Silakan cek email untuk verifikasi, lalu login.');
+        setSuccessMsg('Akun dibuat, cek email Anda untuk verifikasi instan.');
         setMode('login');
       }
     } catch (err) {
       setErrorMsg(err.message || 'Terjadi kesalahan. Coba lagi ya.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgot() {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!email.trim()) {
+      setErrorMsg('Isi email dulu untuk reset kata sandi.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email);
+      if (error) throw error;
+      setSuccessMsg('Tautan reset terkirim ke email Anda.');
+    } catch (err) {
+      setErrorMsg(err.message || 'Gagal mengirim tautan reset.');
     } finally {
       setLoading(false);
     }
@@ -52,110 +82,108 @@ function Login() {
 
   return (
     <div className="login-page">
-      {/* hiasan background */}
-      <div className="login-blob login-blob-1" aria-hidden="true" />
-      <div className="login-blob login-blob-2" aria-hidden="true" />
-      <div className="login-blob login-blob-3" aria-hidden="true" />
-
       <div className="login-card">
         {/* Panel kiri - branding */}
         <div className="login-brand">
-          <div className="login-logo">
-            <span className="login-logo-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                <rect x="2" y="6" width="20" height="13" rx="3" fill="white" opacity="0.95" />
-                <rect x="2" y="6" width="20" height="5" rx="2.5" fill="#10b981" />
-                <circle cx="17.5" cy="14.5" r="1.8" fill="#065f46" />
-                <path d="M6 3.5h9l-1.5 2.5H6z" fill="white" opacity="0.9" />
-              </svg>
-            </span>
-            <span className="login-logo-text">Taktuntuwang</span>
-          </div>
+          <div className="login-glow login-glow-1" aria-hidden="true" />
+          <div className="login-glow login-glow-2" aria-hidden="true" />
+          <div className="login-brand-top">
+            <div className="login-mark">
+              <span className="login-mark-icon">
+                <span className="material-symbols-outlined">account_balance_wallet</span>
+              </span>
+              <span className="login-mark-text">
+                <strong>Taktuntuwang</strong>
+                <em>FINANSIAL AI</em>
+              </span>
+            </div>
 
-          <h1 className="login-title">
-            Kelola uang
-            <br />
-            semudah <span className="login-highlight">ngobrol.</span>
-          </h1>
-          <p className="login-subtitle">
-            Ceritakan aja pemasukan &amp; pengeluaran kamu, biar AI yang mencatat dan merangkumnya.
-          </p>
+            <h1 className="login-title">Kelola uang semudah ngobrol</h1>
+            <p className="login-subtitle">
+              Ceritakan pemasukan dan pengeluaran, AI mencatat dan merangkumnya secara otomatis tanpa ribet.
+            </p>
 
           <ul className="login-features">
             <li>
-              <span className="login-feat-icon">💬</span>
+              <span className="login-feat-icon">
+                <span className="material-symbols-outlined">chat_bubble</span>
+              </span>
               <div>
                 <strong>Chat-based tracking</strong>
-                <span>Ketik natural, otomatis tercatat</span>
+                <span>Tulis pengeluaran seperti mengirim pesan ke teman santai.</span>
               </div>
             </li>
             <li>
-              <span className="login-feat-icon">📊</span>
+              <span className="login-feat-icon">
+                <span className="material-symbols-outlined">query_stats</span>
+              </span>
               <div>
                 <strong>Ringkasan visual</strong>
-                <span>Grafik harian, mingguan, bulanan</span>
+                <span>Grafik pengeluaran &amp; pemasukan diperbarui otomatis secara real-time.</span>
               </div>
             </li>
             <li>
-              <span className="login-feat-icon">🔒</span>
+              <span className="login-feat-icon">
+                <span className="material-symbols-outlined">lock</span>
+              </span>
               <div>
                 <strong>Aman &amp; privat</strong>
-                <span>Data terenkripsi via Supabase Auth</span>
+                <span>Data keuangan tersimpan aman dengan enkripsi standar industri.</span>
               </div>
             </li>
           </ul>
-
-          <div className="login-brand-footer">
-            <div className="login-avatars">
-              <span>🧑‍💼</span>
-              <span>👩‍🎓</span>
-              <span>👨‍💻</span>
-              <span className="login-avatars-more">2k+</span>
-            </div>
-            <p>Dipercaya 2.000+ pengguna hemat</p>
           </div>
+          <p className="login-meta">Taktuntuwang v1.0 • Asisten Keuangan Pribadi Berbasis AI</p>
         </div>
 
         {/* Panel kanan - form */}
         <div className="login-form-wrap">
-          <div className="login-tabs">
+          <div className="login-tabs" role="tablist">
             <button
               type="button"
+              role="tab"
+              aria-selected={isLogin}
               className={isLogin ? 'login-tab active' : 'login-tab'}
               onClick={() => switchMode('login')}
             >
               Masuk
+              {isLogin && <span className="login-tab-ind" aria-hidden="true" />}
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={!isLogin}
               className={!isLogin ? 'login-tab active' : 'login-tab'}
               onClick={() => switchMode('register')}
             >
-              Daftar
+              Daftar Akun
+              {!isLogin && <span className="login-tab-ind" aria-hidden="true" />}
             </button>
-            <span className={`login-tab-pill ${isLogin ? 'left' : 'right'}`} aria-hidden="true" />
           </div>
 
-          <h2 className="login-form-title">
-            {isLogin ? 'Selamat datang kembali 👋' : 'Buat akun barumu ✨'}
-          </h2>
-          <p className="login-form-desc">
-            {isLogin
-              ? 'Masuk untuk lanjut mencatat keuanganmu hari ini.'
-              : 'Gratis, cuma butuh email dan password.'}
-          </p>
-
           <form className="login-form" onSubmit={handleSubmit}>
+            {!isLogin && (
+              <label className="login-field">
+                <span className="login-label">Nama Lengkap</span>
+                <span className="login-input-wrap">
+                  <span className="material-symbols-outlined login-input-icon">person</span>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Andi Pratama"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
+                  />
+                </span>
+              </label>
+            )}
             <label className="login-field">
               <span className="login-label">Email</span>
               <span className="login-input-wrap">
-                <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <path d="m3 7 9 6 9-6" />
-                </svg>
+                <span className="material-symbols-outlined login-input-icon">mail</span>
                 <input
                   type="email"
-                  placeholder="kamu@email.com"
+                  placeholder="nama@email.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -164,16 +192,20 @@ function Login() {
               </span>
             </label>
 
-            <label className="login-field">
-              <span className="login-label">Password</span>
+            <div className="login-field">
+              <span className="login-label-row">
+                <span className="login-label">Kata Sandi</span>
+                {isLogin && (
+                  <button type="button" className="login-link" onClick={handleForgot}>
+                    Lupa kata sandi?
+                  </button>
+                )}
+              </span>
               <span className="login-input-wrap">
-                <svg className="login-input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="4" y="10" width="16" height="10" rx="2" />
-                  <path d="M8 10V7a4 4 0 0 1 8 0v3" />
-                </svg>
+                <span className="material-symbols-outlined login-input-icon">key</span>
                 <input
                   type={showPw ? 'text' : 'password'}
-                  placeholder={isLogin ? 'Masukkan password' : 'Minimal 6 karakter'}
+                  placeholder="Minimal 8 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
@@ -181,61 +213,53 @@ function Login() {
                 />
                 <button
                   type="button"
-                  className="login-eye"
+                  className="login-peek"
                   onClick={() => setShowPw((v) => !v)}
-                  aria-label={showPw ? 'Sembunyikan password' : 'Tampilkan password'}
+                  aria-label={showPw ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
                 >
-                  {showPw ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M17.94 17.94A10.5 10.5 0 0 1 12 19c-5 0-9-4.5-10-7 1-2.5 5-7 10-7a10.6 10.6 0 0 1 4.06.8" />
-                      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
-                      <path d="m2 2 20 20" />
-                    </svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                      <circle cx="12" cy="12" r="3" />
-                    </svg>
-                  )}
+                  <span className="material-symbols-outlined">
+                    {showPw ? 'visibility_off' : 'visibility'}
+                  </span>
+                  <span>{showPw ? 'Tutup' : 'Lihat'}</span>
                 </button>
               </span>
-            </label>
+            </div>
 
-            {errorMsg && (
-              <div className="login-alert login-alert-error" role="alert">
-                <span>⚠️</span>
-                <p>{errorMsg}</p>
-              </div>
-            )}
-            {successMsg && (
-              <div className="login-alert login-alert-success" role="status">
-                <span>✅</span>
-                <p>{successMsg}</p>
-              </div>
-            )}
-
-            <button type="submit" className="login-submit" disabled={loading}>
-              {loading ? (
-                <>
-                  <span className="login-spinner" aria-hidden="true" />
-                  {isLogin ? 'Masuk...' : 'Mendaftar...'}
-                </>
-              ) : (
-                <>{isLogin ? 'Masuk →' : 'Buat Akun Gratis →'}</>
-              )}
-            </button>
+            <div className="login-submit-wrap">
+              <button type="submit" className="login-submit" disabled={loading}>
+                {loading ? (
+                  <>
+                    <span className="login-spinner" aria-hidden="true" />
+                    {isLogin ? 'Masuk...' : 'Mendaftar...'}
+                  </>
+                ) : (
+                  <>
+                    <span>{isLogin ? 'Masuk ke Akun' : 'Daftar Akun Baru'}</span>
+                    <span className="material-symbols-outlined">
+                      {isLogin ? 'arrow_forward' : 'person_add'}
+                    </span>
+                  </>
+                )}
+              </button>
+            </div>
           </form>
 
-          <p className="login-switch">
-            {isLogin ? (
-              <>Belum punya akun? <button type="button" onClick={() => switchMode('register')}>Daftar gratis</button></>
-            ) : (
-              <>Sudah punya akun? <button type="button" onClick={() => switchMode('login')}>Masuk di sini</button></>
-            )}
-          </p>
+          {errorMsg && (
+            <div className="login-alert login-alert-error" role="alert">
+              <span className="material-symbols-outlined">error</span>
+              <p>{errorMsg}</p>
+            </div>
+          )}
+          {successMsg && (
+            <div className="login-alert login-alert-success" role="status">
+              <span className="material-symbols-outlined">check_circle</span>
+              <p>{successMsg}</p>
+            </div>
+          )}
 
-          <p className="login-terms">
-            Dengan lanjut, kamu setuju dengan Syarat &amp; Kebijakan Privasi Taktuntuwang.
+          <p className="login-secure">
+            <span className="material-symbols-outlined">verified_user</span>
+            Dilindungi standar keamanan perbankan 256-bit TLS
           </p>
         </div>
       </div>

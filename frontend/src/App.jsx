@@ -10,18 +10,23 @@ function nowTime() {
   return new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
 }
 
+function todayLabel() {
+  return new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Suggestion chips persis mock: kopi, gaji, belanja, ringkasan.
 const QUICK_PROMPTS = [
-  '💰 Gaji masuk 5 juta',
-  '☕ Beli kopi 20rb',
-  '🏠 Bayar kos 800rb',
-  '📊 Rekap bulan ini',
+  { icon: 'coffee', text: 'Beli kopi susu 18rb' },
+  { icon: 'payments', text: 'Gaji bulanan masuk 6 jt' },
+  { icon: 'shopping_cart', text: 'Belanja bulanan 350rb' },
+  { icon: 'pie_chart', text: 'Ringkasan' },
 ];
 
 function App() {
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
   const [messages, setMessages] = useState([
-    { id: 1, sender: 'bot', text: 'Halo! 👋 Ceritakan aja pemasukan / pengeluaran kamu, contoh: "Gaji 5jt" atau "Makan siang 25rb".', time: nowTime() },
+    { id: 1, sender: 'bot', text: 'Halo! Ada pengeluaran atau pemasukan baru? Cukup ketik santai saja, biar saya catat otomatis.', time: nowTime() },
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const [chartPeriod, setChartPeriod] = useState('month');
@@ -63,8 +68,9 @@ function App() {
       const botMsg = {
         id: Date.now() + 1,
         sender: 'bot',
-        text: data.reply || 'Oke, sudah kucatat! ✅',
+        text: data.reply || 'Oke, sudah kucatat!',
         time: nowTime(),
+        saved: data.saved || [],
       };
       // Kartu konfirmasi hapus: tombol di dalam bubble chat.
       if (data.action === 'confirm_delete' && data.candidates?.length) {
@@ -84,7 +90,7 @@ function App() {
       setMessages((prev) => [...prev, {
         id: Date.now() + 1,
         sender: 'bot',
-        text: 'Waduh, gagal connect ke server nih. Pastikan backend jalan di localhost:8080 🛠️',
+        text: 'Waduh, gagal terhubung ke server. Pastikan backend jalan di localhost:8080.',
         time: nowTime(),
       }]);
     } finally {
@@ -126,106 +132,138 @@ function App() {
   }
 
   const email = session.user.email || '';
-  const initial = (email[0] || 'U').toUpperCase();
+  const namePart = email.split('@')[0].replace(/[._-]+/g, ' ').trim() || 'Pengguna';
+  const displayName = namePart.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const initials = displayName.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  const userNotes = messages.filter((m) => m.sender === 'user').length;
 
   return (
-    <div className="chat-app">
-      {/* Header */}
-      <header className="chat-header">
-        <div className="chat-header-inner">
-          <div className="chat-brand">
-            <span className="chat-logo">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <rect x="2" y="6" width="20" height="13" rx="3" fill="white" opacity="0.95" />
-                <rect x="2" y="6" width="20" height="5" rx="2.5" fill="#10b981" />
-                <circle cx="17.5" cy="14.5" r="1.8" fill="#065f46" />
-              </svg>
+    <div className="app-shell">
+      <div className="app-wrap">
+        {/* Top bar terintegrasi persis mock ringkasan */}
+        <header className="topbar">
+          <div className="topbar-brand">
+            <span className="topbar-logo">
+              <span className="material-symbols-outlined">account_balance_wallet</span>
             </span>
-            <div>
-              <strong className="chat-brand-name">Taktuntuwang</strong>
-              <span className="chat-brand-status"><i className="dot" /> Asisten keuangan online</span>
+            <div className="topbar-title">
+              <strong>Taktuntuwang</strong>
+              <span>Asisten Pencatatan Keuangan Cerdas</span>
             </div>
           </div>
-          <div className="chat-user">
-            <span className="chat-avatar">{initial}</span>
-            <span className="chat-email">{email}</span>
-            <button className="chat-logout" onClick={() => supabase.auth.signOut()} title="Keluar">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <path d="m16 17 5-5-5-5" />
-                <path d="M21 12H9" />
-              </svg>
+          <div className="topbar-right">
+            <span className="ai-pill"><i className="dot" /> AI Aktif &amp; Siap Membantu</span>
+            <span className="topbar-div" aria-hidden="true" />
+            <div className="topbar-user">
+              <span className="topbar-avatar">{initials}</span>
+              <span className="topbar-who">
+                <strong>{displayName}</strong>
+                <em>{email}</em>
+              </span>
+            </div>
+            <button className="topbar-logout" onClick={() => supabase.auth.signOut()} title="Keluar">
+              <span className="material-symbols-outlined">logout</span>
               <span>Keluar</span>
             </button>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main */}
-      <main className="chat-main">
-        {/* Chat panel */}
-        <section className="chat-panel">
-          <div className="chat-panel-head">
-            <div>
-              <h2>Room Chat 💬</h2>
-              <p>Ceritakan transaksi harianmu dengan bahasa santai</p>
-            </div>
-            <span className="chat-count">{messages.length} pesan</span>
-          </div>
-
-          <div className="chat-messages" ref={scrollRef}>
-            {messages.map((msg) => (
-              <ChatBubble
-                key={msg.id || msg.text}
-                sender={msg.sender}
-                text={msg.text}
-                time={msg.time}
-                confirmDelete={msg.confirmDelete}
-                deleteDone={msg.deleteDone}
-                onConfirmDelete={(txId) => handleConfirmDelete(msg.id, txId)}
-              />
-            ))}
-            {isTyping && (
-              <div className="bubble-row bot">
-                <div className="bubble-avatar">✍️</div>
-                <div className="bubble bubble-bot typing">
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
+      {/* Workspace 2 kolom: chat 7 + insight 5 */}
+        <main className="workspace">
+          {/* Kartu chat kiri */}
+          <section className="chat-card">
+            <div className="chat-card-head">
+              <div className="chat-card-id">
+                <span className="chat-card-avatar">
+                  <span className="material-symbols-outlined">smart_toy</span>
+                </span>
+                <div>
+                  <div className="chat-card-titlerow">
+                    <h1>Asisten Keuangan</h1>
+                    <span className="ready-pill"><i className="dot" /> Siap Membantu</span>
+                  </div>
+                  <p>Ketik santai seperti mengobrol dengan teman</p>
                 </div>
               </div>
-            )}
+              <span className="today-pill">
+                <span className="material-symbols-outlined">receipt_long</span>
+                {userNotes} Catatan Hari Ini
+              </span>
+            </div>
+
+            <div className="chat-stream" ref={scrollRef}>
+              <div className="date-sep"><span>{todayLabel()}</span></div>
+              {messages.map((msg) => (
+                <ChatBubble
+                  key={msg.id || msg.text}
+                  sender={msg.sender}
+                  text={msg.text}
+                  time={msg.time}
+                  saved={msg.saved}
+                  confirmDelete={msg.confirmDelete}
+                  deleteDone={msg.deleteDone}
+                  userInitial={initials}
+                  onConfirmDelete={(txId) => handleConfirmDelete(msg.id, txId)}
+                />
+              ))}
+              {isTyping && (
+                <div className="msg-row bot">
+                  <span className="msg-avatar bot">
+                    <span className="material-symbols-outlined">smart_toy</span>
+                  </span>
+                  <div className="msg-col-start">
+                    <div className="bubble-bot typing">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="quick-row">
+              <span className="quick-label">
+                <span className="material-symbols-outlined">bolt</span>
+                Coba klik:
+              </span>
+              {QUICK_PROMPTS.map((q) => (
+                <button
+                  key={q.text}
+                  type="button"
+                  className="quick-chip"
+                  onClick={() => handleSend(q.text)}
+                  disabled={isTyping}
+                >
+                  <span className="material-symbols-outlined">{q.icon}</span>
+                  {q.text}
+                </button>
+              ))}
+            </div>
+
+            <ChatInput onSend={handleSend} disabled={isTyping} />
+          </section>
+
+          {/* Panel insight kanan */}
+          <aside className="insight-panel">
+            <InsightPanel
+              period={chartPeriod}
+              onPeriodChange={setChartPeriod}
+              refreshKey={summaryKey}
+              liveSnapshot={liveSummary}
+              onChanged={() => setSummaryKey((k) => k + 1)}
+              onFillExample={(text) => handleSend(text)}
+            />
+          </aside>
+        </main>
+
+        <footer className="app-foot">
+          <div className="app-foot-inner">
+            <span className="app-foot-brand">Taktuntuwang <em>— Asisten Pencatatan Keuangan Percakapan Cerdas</em></span>
+            <span className="app-foot-copy">© 2024 Taktuntuwang. Hak cipta dilindungi undang-undang.</span>
           </div>
-
-          <div className="chat-suggestions">
-            {QUICK_PROMPTS.map((q) => (
-              <button
-                key={q}
-                type="button"
-                className="chip"
-                onClick={() => handleSend(q.replace(/^[^\s]+\s/, ''))}
-                disabled={isTyping}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-
-          <ChatInput onSend={handleSend} disabled={isTyping} />
-        </section>
-
-        {/* Insight panel */}
-        <aside className="insight-panel">
-          <InsightPanel
-            period={chartPeriod}
-            onPeriodChange={setChartPeriod}
-            refreshKey={summaryKey}
-            liveSnapshot={liveSummary}
-            onChanged={() => setSummaryKey((k) => k + 1)}
-            onFillExample={(text) => handleSend(text)}
-          />
-        </aside>
-      </main>
+        </footer>
+      </div>
     </div>
   );
 }

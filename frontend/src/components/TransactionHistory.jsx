@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { deleteTransaction, getTransactions } from '../api';
 import { getCategoryMeta } from '../lib/categoryMeta';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 50;
 
 function todayStr() {
   const d = new Date();
@@ -17,9 +17,43 @@ function formatRp(n) {
   }).format(n || 0);
 }
 
-function formatDate(iso) {
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+// Kelompok tanggal ala mock: Hari Ini / Kemarin / Riwayat Sebelumnya.
+function groupOf(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  if (sameDay(d, now)) return 'today';
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (sameDay(d, y)) return 'yesterday';
+  return 'older';
+}
+
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':');
+}
+
+function fmtDayLong(iso) {
   return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+function monthLabel(isoDate) {
+  try {
+    const d = isoDate ? new Date(isoDate + 'T00:00:00') : new Date();
+    return d.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+  } catch {
+    return '';
+  }
+}
+
+const TYPE_CHIPS = [
+  { id: 'all', label: 'Semua' },
+  { id: 'income', label: 'Pemasukan' },
+  { id: 'expense', label: 'Pengeluaran' },
+];
 
 function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, initialCustom }) {
   void period;
@@ -30,6 +64,8 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
       ? { from: initialCustom.from, to: initialCustom.to }
       : { from: '', to: '' },
   );
+  const [query, setQuery] = useState('');
+  const [typeChip, setTypeChip] = useState('all');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -126,31 +162,114 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
     }
   }
 
-  return (
-    <div className="insight-card">
-      <div className="insight-head">
-        <div>
-          <h3 className="insight-title">Riwayat Transaksi</h3>
-          <p className="insight-sub">Semua catatan tersimpan di sini</p>
-        </div>
-      </div>
+  // Saring lokal ala mock: query teks + chip tipe. Filter tanggal tetap
+  // di server (applied) supaya ringkasan global ikut tanggal itu.
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return items.filter((tx) => {
+      if (typeChip !== 'all' && tx.type !== typeChip) return false;
+      if (!q) return true;
+      const hay = `${tx.description || ''} ${tx.category || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, query, typeChip]);
 
-      <div className="tx-filters">
-        <div className="tx-dates">
-          <label>
-            Dari
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label>
-            Sampai
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
+  const totals = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    visible.forEach((tx) => {
+      if (tx.type === 'income') income += tx.amount || 0;
+      else expense += tx.amount || 0;
+    });
+    return { income, expense, net: income - expense, count: visible.length };
+  }, [visible]);
+
+  const groups = useMemo(() => {
+    const g = { today: [], yesterday: [], older: [] };
+    visible.forEach((tx) => g[groupOf(tx.created_at)].push(tx));
+    return g;
+  }, [visible]);
+
+  function monthPreset() {
+    const end = new Date();
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
+    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const f = { from: fmt(start), to: fmt(end) };
+    setFrom(f.from);
+    setTo(f.to);
+    setApplied(f);
+    notifyRange(f);
+  }
+
+  function groupTitle(key) {
+    if (key === 'today') return `Hari Ini — ${fmtDayLong(new Date().toISOString())}`;
+    if (key === 'yesterday') {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      return `Kemarin — ${fmtDayLong(y.toISOString())}`;
+    }
+    return 'Riwayat Sebelumnya';
+  }
+
+  function rowSub(tx, groupKey) {
+    const meta = tx.category || (tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran');
+    const when = groupKey === 'older' ? fmtDayLong(tx.created_at) : fmtTime(tx.created_at);
+    return `${meta} • ${when}`;
+  }
+
+  return (
+    <div className="hx-stack">
+      <div className="hx-toolbar">
+        <div className="hx-search">
+          <span className="material-symbols-outlined">search</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cari catatan transaksi..."
+            aria-label="Cari catatan transaksi"
+          />
         </div>
-        <div className="tx-actions">
-          <button type="button" className="insight-period" onClick={() => preset(7)}>7 hari</button>
-          <button type="button" className="insight-period" onClick={applyFilter}>Terapkan</button>
-          <button type="button" className="insight-period" onClick={resetFilter}>Reset</button>
+        <div className="hx-chiprow">
+          <div className="hx-chips">
+            {TYPE_CHIPS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={typeChip === c.id ? 'hx-chip active' : 'hx-chip'}
+                onClick={() => setTypeChip(c.id)}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <button type="button" className="hx-month" onClick={monthPreset} title="Tampilkan bulan berjalan">
+            <span className="material-symbols-outlined">calendar_today</span>
+            {monthLabel(applied.from)}
+            <span className="material-symbols-outlined">expand_more</span>
+          </button>
         </div>
+        <details className="hx-dates">
+          <summary>Filter tanggal khusus</summary>
+          <div className="tx-dates">
+            <label>
+              Dari
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label>
+              Sampai
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </label>
+          </div>
+          <div className="tx-actions">
+            <button type="button" className="insight-period" onClick={() => preset(7)}>7 hari</button>
+            <button type="button" className="insight-period" onClick={applyFilter}>Terapkan</button>
+            <button type="button" className="insight-period" onClick={resetFilter}>Reset</button>
+          </div>
+          {applied.from && applied.to && (
+            <p className="hx-applied">Menampilkan {applied.from} – {applied.to}. Ringkasan ikut rentang ini.</p>
+          )}
+        </details>
       </div>
 
       {loading ? (
@@ -160,41 +279,75 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
         </div>
       ) : error ? (
         <div className="insight-empty">
-          <span>📭</span>
+          <span className="material-symbols-outlined">inbox</span>
           <p>Gagal memuat riwayat. Pastikan backend berjalan.</p>
         </div>
-      ) : items.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="insight-empty">
-          <span>🧾</span>
-          <p>Belum ada transaksi pada rentang ini.</p>
+          <span className="material-symbols-outlined">receipt_long</span>
+          <p>{items.length === 0 ? 'Belum ada transaksi pada rentang ini.' : 'Tidak ada yang cocok dengan pencarian.'}</p>
         </div>
       ) : (
         <>
-          <ul className="tx-list">
-            {items.map((tx) => (
-              <li key={tx.id} className="tx-item">
-                <span className="tx-icon">{tx.type === 'income' ? '💰' : '💸'}</span>
-                <div className="tx-main">
-                  <strong className="tx-cat">{tx.description || tx.category || (tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran')}</strong>
-                  <span className="tx-date">
-                    {tx.description && tx.category ? `${tx.category} • ` : ''}{formatDate(tx.created_at)}
-                  </span>
-                </div>
-                <strong className={tx.type === 'income' ? 'tx-amount in' : 'tx-amount out'}>
-                  {tx.type === 'income' ? '+' : '-'}{formatRp(tx.amount)}
-                </strong>
-                <button
-                  type="button"
-                  className="tx-del"
-                  title="Hapus transaksi"
-                  onClick={() => handleDelete(tx)}
-                  disabled={deletingId === tx.id}
-                >
-                  🗑️
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="hx-total">
+            <div className="hx-total-id">
+              <span className="hx-total-ico">
+                <span className="material-symbols-outlined">receipt_long</span>
+              </span>
+              <div>
+                <span className="hx-total-label">Total Transaksi</span>
+                <span className="hx-total-count">{totals.count} Catatan <em>({monthLabel(applied.from)})</em></span>
+              </div>
+            </div>
+            <div className="hx-total-net">
+              <span className="hx-total-label">Saldo Bersih</span>
+              <strong className={totals.net >= 0 ? 'hx-net in' : 'hx-net out'}>
+                {totals.net >= 0 ? '+' : '-'}{formatRp(Math.abs(totals.net))}
+              </strong>
+            </div>
+          </div>
+
+          {['today', 'yesterday', 'older'].filter((k) => groups[k].length > 0).map((key) => (
+            <div key={key} className="hx-group">
+              <div className="hx-group-head">
+                <h2>{groupTitle(key)}</h2>
+                <span>{groups[key].length} transaksi</span>
+              </div>
+              <ul className="tx-list hx-list">
+                {groups[key].map((tx) => {
+                  const meta = getCategoryMeta(tx.category);
+                  const income = tx.type === 'income';
+                  return (
+                    <li key={tx.id} className="tx-item hx-item">
+                      <span className="hx-ico" style={{ background: meta.bg, color: meta.fg }}>
+                        <span className="material-symbols-outlined">{meta.msym}</span>
+                      </span>
+                      <div className="tx-main">
+                        <strong className="tx-cat">{tx.description || tx.category || (income ? 'Pemasukan' : 'Pengeluaran')}</strong>
+                        <span className="tx-date">
+                          {rowSub(tx, key)} • <span className="hx-via">Via Chat</span>
+                        </span>
+                      </div>
+                      <div className="hx-right">
+                        <strong className={income ? 'tx-amount in' : 'tx-amount out'}>
+                          {income ? '+' : '-'}{formatRp(tx.amount)}
+                        </strong>
+                        <button
+                          type="button"
+                          className="hx-del"
+                          title="Hapus transaksi"
+                          onClick={() => handleDelete(tx)}
+                          disabled={deletingId === tx.id}
+                        >
+                          <span className="material-symbols-outlined">delete</span>
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
           {hasMore && (
             <button
               type="button"

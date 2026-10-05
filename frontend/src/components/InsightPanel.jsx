@@ -3,7 +3,7 @@ import SummaryChart, { PERIODS } from './SummaryChart';
 import TransactionHistory from './TransactionHistory';
 
 const TABS = [
-  { id: 'summary', label: 'Ringkasan', icon: 'pie_chart' },
+  { id: 'summary', label: 'Ringkasan', icon: 'insights' },
   { id: 'history', label: 'Riwayat', icon: 'receipt_long' },
   { id: 'guide', label: 'Panduan', icon: 'menu_book' },
 ];
@@ -35,7 +35,7 @@ function GuidePanel({ onTry }) {
 
   return (
     <div className="guide">
-      <div className="guide-hero">
+      <div className="guide-hero-card">
         <div className="guide-hero-top">
           <span className="guide-hero-ico">
             <span className="material-symbols-outlined">sentiment_satisfied</span>
@@ -57,7 +57,7 @@ function GuidePanel({ onTry }) {
             <span className="material-symbols-outlined">forum</span>
             Contoh Kalimat Sehari-hari
           </h3>
-          <span className="guide-copy-hint">Klik untuk mencoba</span>
+          <span className="guide-copy-hint">Klik untuk salin</span>
         </div>
         {examples.map((ex) => (
           <button
@@ -78,7 +78,7 @@ function GuidePanel({ onTry }) {
 
       <div className="guide-sec">
         <h3>
-          <span className="material-symbols-outlined">tips_and_updates</span>
+          <span className="material-symbols-outlined amber">tips_and_updates</span>
           Tips Praktis untuk Pemula
         </h3>
         <div className="tips-box">
@@ -116,11 +116,6 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
   }, [liveSnapshot, period]);
 
   const periodLabel = (PERIODS.find((p) => p.value === period) || {}).label || 'Bulan ini';
-  const subLabel = tab === 'summary'
-    ? 'Ringkasan otomatis dari catatanmu'
-    : tab === 'history'
-      ? 'Semua transaksi tercatat di sini'
-      : 'Panduan mudah mencatat keuangan dengan bahasa sehari-hari';
 
   return (
     <>
@@ -136,10 +131,11 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
               >
                 <span className="material-symbols-outlined">{t.icon}</span>
                 {t.label}
+                {tab === t.id && <span className="tab-ind" aria-hidden="true" />}
               </button>
             ))}
           </div>
-          {tab === 'summary' ? (
+          {tab === 'summary' && (
             <div className="period-wrap">
               <button
                 type="button"
@@ -170,16 +166,17 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
                 </div>
               )}
             </div>
-          ) : (
-            <span className="guide-badge">{tab === 'history' ? (historyRange?.label || 'Ikut ringkasan') : 'Panduan Pemula'}</span>
+          )}
+          {tab === 'guide' && (
+            <span className="guide-badge">Panduan Pemula</span>
           )}
         </div>
-        <p className="tabs-sub">
-          {tab === 'summary' && <span className="material-symbols-outlined">insights</span>}
-          {tab === 'history' && <span className="material-symbols-outlined">history</span>}
-          {tab === 'guide' && <span className="material-symbols-outlined">school</span>}
-          {subLabel} • {tab === 'summary' ? periodLabel : tab === 'history' ? 'Terbaru dulu' : 'Contoh siap pakai'}
-        </p>
+        {tab === 'guide' && (
+          <p className="tabs-sub">
+            <span className="material-symbols-outlined">verified</span>
+            Panduan mudah mencatat keuangan dengan bahasa sehari-hari
+          </p>
+        )}
       </div>
 
       <div className="tabs-body">
