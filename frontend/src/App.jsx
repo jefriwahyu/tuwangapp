@@ -26,7 +26,7 @@ function App() {
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
   const [messages, setMessages] = useState([
-    { id: 1, sender: 'bot', text: 'Halo! Ada pengeluaran atau pemasukan baru? Cukup ketik santai saja, biar saya catat otomatis.', time: nowTime() },
+    { id: 1, sender: 'bot', text: 'Halo! Senang bertemu denganmu. Ada pengeluaran atau pemasukan baru? Langsung ceritakan saja di sini, biar aku yang rapikan pembukuannya ya.', time: nowTime() },
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const [chartPeriod, setChartPeriod] = useState('month');
