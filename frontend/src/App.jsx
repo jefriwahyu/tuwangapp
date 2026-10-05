@@ -3,8 +3,7 @@ import { supabase } from './lib/supabaseClient';
 import Login from './components/Login';
 import ChatBubble from './components/ChatBubble';
 import ChatInput from './components/ChatInput';
-import SummaryChart from './components/SummaryChart';
-import TransactionHistory from './components/TransactionHistory';
+import InsightPanel from './components/InsightPanel';
 import { deleteTransaction, sendMessage } from './api';
 
 function nowTime() {
@@ -217,18 +216,14 @@ function App() {
 
         {/* Insight panel */}
         <aside className="insight-panel">
-          <SummaryChart period={chartPeriod} onPeriodChange={setChartPeriod} refreshKey={summaryKey} liveSnapshot={liveSummary} />
-          <TransactionHistory refreshKey={summaryKey} onChanged={() => setSummaryKey((k) => k + 1)} />
-
-          <div className="insight-card howto">
-            <h3>🚀 Cara pakai</h3>
-            <ol>
-              <li>Ketik <b>"Gaji 5 juta"</b> untuk pemasukan</li>
-              <li>Ketik <b>"Beli kopi 20rb"</b> untuk pengeluaran</li>
-              <li>Ketik <b>"kopi 10k, parkir 5rb"</b> untuk catat 2 sekaligus</li>
-              <li>Ketik <b>"Rekap minggu ini"</b> untuk ringkasan</li>
-            </ol>
-          </div>
+          <InsightPanel
+            period={chartPeriod}
+            onPeriodChange={setChartPeriod}
+            refreshKey={summaryKey}
+            liveSnapshot={liveSummary}
+            onChanged={() => setSummaryKey((k) => k + 1)}
+            onFillExample={(text) => handleSend(text)}
+          />
         </aside>
       </main>
     </div>

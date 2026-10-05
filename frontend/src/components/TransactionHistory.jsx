@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { deleteTransaction, getTransactions } from '../api';
+import { getCategoryMeta } from '../lib/categoryMeta';
 
 const PAGE_SIZE = 10;
 
@@ -20,10 +21,15 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function TransactionHistory({ refreshKey, onChanged }) {
-  const [to, setTo] = useState(todayStr());
-  const [from, setFrom] = useState('');
-  const [applied, setApplied] = useState({ from: '', to: '' });
+function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, initialCustom }) {
+  void period;
+  const [to, setTo] = useState((initialCustom && initialCustom.to) || todayStr());
+  const [from, setFrom] = useState((initialCustom && initialCustom.from) || '');
+  const [applied, setApplied] = useState(
+    initialCustom && initialCustom.from
+      ? { from: initialCustom.from, to: initialCustom.to }
+      : { from: '', to: '' },
+  );
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -63,14 +69,34 @@ function TransactionHistory({ refreshKey, onChanged }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applied, refreshKey]);
 
+  function notifyRange(f) {
+    if (onRangeChange) {
+      if (f.from && f.to) {
+        const fmtShort = (iso) => {
+          try {
+            return new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+          } catch {
+            return iso;
+          }
+        };
+        onRangeChange({ from: f.from, to: f.to, label: (fmtShort(f.from) + ' – ' + fmtShort(f.to)) });
+      } else {
+        onRangeChange(null);
+      }
+    }
+  }
+
   function applyFilter() {
-    setApplied({ from, to });
+    const f = { from, to };
+    setApplied(f);
+    notifyRange(f);
   }
 
   function resetFilter() {
     setFrom('');
     setTo(todayStr());
     setApplied({ from: '', to: '' });
+    if (onRangeChange) onRangeChange(null);
   }
 
   function preset(days) {
@@ -82,6 +108,7 @@ function TransactionHistory({ refreshKey, onChanged }) {
     setFrom(f.from);
     setTo(f.to);
     setApplied(f);
+    notifyRange(f);
   }
 
   async function handleDelete(tx) {

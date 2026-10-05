@@ -61,6 +61,7 @@ func main() {
 	{
 		protected.POST("/chat", handler.ChatHandler)
 		protected.GET("/summary", handler.GetSummaryHandler)
+		protected.GET("/trend", handler.GetTrendHandler)
 		protected.GET("/transactions", handler.GetTransactionsHandler)
 		protected.DELETE("/transactions/:id", handler.DeleteTransactionHandler)
 	}

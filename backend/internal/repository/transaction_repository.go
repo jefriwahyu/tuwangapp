@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -71,7 +72,7 @@ type TransactionRow struct {
 	CreatedAt   string  `json:"created_at"`
 }
 
-func GetSummary(userID string, period string) (income float64, expense float64, err error) {
+func GetSummary(userID string, period string) (income float64, expense float64, incomeCount int, expenseCount int, err error) {
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
 
@@ -79,7 +80,7 @@ func GetSummary(userID string, period string) (income float64, expense float64, 
 
 	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 	q := u.Query()
 	q.Set("select", "type,amount")
@@ -90,34 +91,113 @@ func GetSummary(userID string, period string) (income float64, expense float64, 
 
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 	req.Header.Set("apikey", serviceKey)
 	req.Header.Set("Authorization", "Bearer "+serviceKey)
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return 0, 0, fmt.Errorf("supabase error: status %d", resp.StatusCode)
+		return 0, 0, 0, 0, fmt.Errorf("supabase error: status %d", resp.StatusCode)
 	}
 
 	var rows []TransactionRow
 	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 
 	for _, row := range rows {
 		if row.Type == "income" {
 			income += row.Amount
+			incomeCount++
 		} else if row.Type == "expense" {
 			expense += row.Amount
+			expenseCount++
 		}
 	}
-	return income, expense, nil
+	return income, expense, incomeCount, expenseCount, nil
+}
+
+// parseCustomRange memvalidasi from/to YYYY-MM-DD dan mengembalikan
+// batas Supabase: gte awal hari from, lt awal hari setelah to.
+// Hari pakai zona +07:00 seperti ListFilter supaya konsisten.
+func parseCustomRange(from, to string) (start, end string, err error) {
+	if from == "" || to == "" {
+		return "", "", fmt.Errorf("from dan to harus diisi bersamaan (YYYY-MM-DD)")
+	}
+	fd, err := time.Parse("2006-01-02", from)
+	if err != nil {
+		return "", "", fmt.Errorf("format from tidak valid (pakai YYYY-MM-DD)")
+	}
+	td, err := time.Parse("2006-01-02", to)
+	if err != nil {
+		return "", "", fmt.Errorf("format to tidak valid (pakai YYYY-MM-DD)")
+	}
+	if td.Before(fd) {
+		return "", "", fmt.Errorf("to tidak boleh sebelum from")
+	}
+	next := td.AddDate(0, 0, 1).Format("2006-01-02")
+	return from + "T00:00:00+07:00", next + "T00:00:00+07:00", nil
+}
+
+// GetSummaryCustom seperti GetSummary tapi rentang tanggal bebas.
+// Dipakai handler ?from=&to= supaya ringkasan ikut filter riwayat.
+func GetSummaryCustom(userID, from, to string) (income float64, expense float64, incomeCount int, expenseCount int, err error) {
+	startDate, endDate, err := parseCustomRange(from, to)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
+
+	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	q := u.Query()
+	q.Set("select", "type,amount")
+	q.Set("user_id", "eq."+userID)
+	q.Add("created_at", "gte."+startDate)
+	q.Add("created_at", "lt."+endDate)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	req.Header.Set("apikey", serviceKey)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return 0, 0, 0, 0, fmt.Errorf("supabase error: status %d", resp.StatusCode)
+	}
+
+	var rows []TransactionRow
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return 0, 0, 0, 0, err
+	}
+
+	for _, row := range rows {
+		if row.Type == "income" {
+			income += row.Amount
+			incomeCount++
+		} else if row.Type == "expense" {
+			expense += row.Amount
+			expenseCount++
+		}
+	}
+	return income, expense, incomeCount, expenseCount, nil
 }
 
 // CategoryBreakdown adalah total per (type, category) untuk satu periode.
@@ -168,11 +248,16 @@ func GetCategoryBreakdown(userID string, period string) ([]CategoryBreakdown, er
 		return nil, err
 	}
 
+	return groupBreakdown(rows), nil
+}
+
+// groupBreakdown adalah satu-satunya agregasi kategori dari rows.
+// Normalisasi di baca juga: data lama yang kategorinya bebas ikut
+// dipetakan ke daftar kanonis, kosong = Lainnya.
+func groupBreakdown(rows []TransactionRow) []CategoryBreakdown {
 	grouped := map[string]*CategoryBreakdown{}
 	order := []string{}
 	for _, row := range rows {
-		// Normalisasi di baca juga: data lama yang kategorinya bebas
-		// ikut dipetakan ke daftar kanonis, kosong = Lainnya.
 		cat := category.Normalize(row.Category)
 		key := row.Type + "|" + cat
 		if g, ok := grouped[key]; ok {
@@ -186,7 +271,53 @@ func GetCategoryBreakdown(userID string, period string) ([]CategoryBreakdown, er
 	for _, k := range order {
 		out = append(out, *grouped[k])
 	}
-	return out, nil
+	return out
+}
+
+// GetCategoryBreakdownCustom seperti GetCategoryBreakdown tapi rentang
+// tanggal bebas. Dipakai handler ?from=&to= supaya kategori ikut filter.
+func GetCategoryBreakdownCustom(userID, from, to string) ([]CategoryBreakdown, error) {
+	startDate, endDate, err := parseCustomRange(from, to)
+	if err != nil {
+		return nil, err
+	}
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
+
+	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	q.Set("select", "type,category,amount")
+	q.Set("user_id", "eq."+userID)
+	q.Add("created_at", "gte."+startDate)
+	q.Add("created_at", "lt."+endDate)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", serviceKey)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("supabase error: status %d", resp.StatusCode)
+	}
+
+	var rows []TransactionRow
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, err
+	}
+
+	return groupBreakdown(rows), nil
 }
 
 // ListFilter adalah parameter saring + paging untuk daftar transaksi.
@@ -337,4 +468,257 @@ func periodRange(period string) (start, end string) {
 		endTime = now
 	}
 	return startTime.Format(time.RFC3339), endTime.Format(time.RFC3339)
+}
+
+// TrendBucket adalah satu titik deret waktu untuk grafik garis.
+type TrendBucket struct {
+	Label   string  `json:"label"`
+	Income  float64 `json:"income"`
+	Expense float64 `json:"expense"`
+}
+
+// fetchTrendRows mengambil type+amount+created_at milik user pada rentang.
+func fetchTrendRows(userID, startDate, endDate string) ([]TransactionRow, error) {
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	serviceKey := os.Getenv("SUPABASE_SERVICE_KEY")
+
+	u, err := url.Parse(supabaseURL + "/rest/v1/transactions")
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	q.Set("select", "type,amount,created_at")
+	q.Set("user_id", "eq."+userID)
+	q.Add("created_at", "gte."+startDate)
+	q.Add("created_at", "lt."+endDate)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", serviceKey)
+	req.Header.Set("Authorization", "Bearer "+serviceKey)
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("supabase error: status %d", resp.StatusCode)
+	}
+
+	var rows []TransactionRow
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// trendDayKey mengubah created_at ISO menjadi YYYY-MM-DD (+07:00).
+func trendDayKey(iso string) string {
+	if t, err := time.Parse(time.RFC3339, iso); err == nil {
+		return t.Format("2006-01-02")
+	}
+	if len(iso) >= 10 {
+		return iso[:10]
+	}
+	return iso
+}
+
+// shortDayLabel "2026-10-05" -> "5 Okt" untuk label grafik.
+func shortDayLabel(ymd string) string {
+	if d, err := time.Parse("2006-01-02", ymd); err == nil {
+		return d.Format("2 Jan")
+	}
+	return ymd
+}
+
+// GetTrend deret waktu preset: month = per minggu bulan berjalan,
+// year = per bulan tahun berjalan. Periode lain ditolak (400).
+func GetTrend(userID, period string) ([]TrendBucket, error) {
+	now := time.Now()
+	switch period {
+	case "month":
+		start, end := periodRange("month")
+		rows, err := fetchTrendRows(userID, start, end)
+		if err != nil {
+			return nil, err
+		}
+		// 4-5 bucket minggu: 1-7, 8-14, 15-21, 22-akhir.
+		buckets := []TrendBucket{
+			{Label: "Minggu 1"}, {Label: "Minggu 2"}, {Label: "Minggu 3"}, {Label: "Minggu 4"},
+		}
+		// Bulan 28+ hari: hari 29+ masuk bucket terakhir.
+		for _, row := range rows {
+			day := 1
+			if d, err := time.Parse("2006-01-02", trendDayKey(row.CreatedAt)); err == nil {
+				day = d.Day()
+			}
+			idx := (day - 1) / 7
+			if idx > 3 {
+				idx = 3
+			}
+			if row.Type == "income" {
+				buckets[idx].Income += row.Amount
+			} else if row.Type == "expense" {
+				buckets[idx].Expense += row.Amount
+			}
+		}
+		return buckets, nil
+	case "year":
+		start, end := periodRange("year")
+		rows, err := fetchTrendRows(userID, start, end)
+		if err != nil {
+			return nil, err
+		}
+		buckets := make([]TrendBucket, 12)
+		for i := range buckets {
+			buckets[i].Label = time.Date(now.Year(), time.Month(i+1), 1, 0, 0, 0, 0, now.Location()).Format("Jan")
+		}
+		for _, row := range rows {
+			m := -1
+			if t, err := time.Parse(time.RFC3339, row.CreatedAt); err == nil {
+				m = int(t.Month()) - 1
+			} else if len(row.CreatedAt) >= 7 {
+				if mm, err := strconv.Atoi(row.CreatedAt[5:7]); err == nil {
+					m = mm - 1
+				}
+			}
+			if m < 0 || m > 11 {
+				continue
+			}
+			if row.Type == "income" {
+				buckets[m].Income += row.Amount
+			} else if row.Type == "expense" {
+				buckets[m].Expense += row.Amount
+			}
+		}
+		return buckets, nil
+	default:
+		return nil, fmt.Errorf("period tren didukung: month, year")
+	}
+}
+
+// GetTrendCustom tren rentang bebas dengan bucket adaptif:
+// <=31 hari = harian, <=120 hari = mingguan, selebihnya = bulanan.
+func GetTrendCustom(userID, from, to string) ([]TrendBucket, error) {
+	startDate, endDate, err := parseCustomRange(from, to)
+	if err != nil {
+		return nil, err
+	}
+	fd, _ := time.Parse("2006-01-02", from)
+	td, _ := time.Parse("2006-01-02", to)
+	days := int(td.Sub(fd).Hours()/24) + 1
+
+	rows, err := fetchTrendRows(userID, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	switch {
+	case days <= 31:
+		// Bucket harian, urut tanggal.
+		keys := []string{}
+		seen := map[string]bool{}
+		for d := fd; !d.After(td); d = d.AddDate(0, 0, 1) {
+			k := d.Format("2006-01-02")
+			keys = append(keys, k)
+			seen[k] = true
+		}
+		agg := map[string]*TrendBucket{}
+		for _, k := range keys {
+			agg[k] = &TrendBucket{Label: shortDayLabel(k)}
+		}
+		for _, row := range rows {
+			k := trendDayKey(row.CreatedAt)
+			b, ok := agg[k]
+			if !ok {
+				continue
+			}
+			if row.Type == "income" {
+				b.Income += row.Amount
+			} else if row.Type == "expense" {
+				b.Expense += row.Amount
+			}
+		}
+		_ = seen
+		out := make([]TrendBucket, 0, len(keys))
+		for _, k := range keys {
+			out = append(out, *agg[k])
+		}
+		return out, nil
+	case days <= 120:
+		// Bucket mingguan: potong per 7 hari dari from.
+		type span struct{ start, end time.Time }
+		var spans []span
+		for s := fd; !s.After(td); {
+			e := s.AddDate(0, 0, 6)
+			if e.After(td) {
+				e = td
+			}
+			spans = append(spans, span{s, e})
+			s = e.AddDate(0, 0, 1)
+		}
+		buckets := make([]TrendBucket, len(spans))
+		for i, sp := range spans {
+			if sp.start.Format("2006-01-02") == sp.end.Format("2006-01-02") {
+				buckets[i].Label = shortDayLabel(sp.start.Format("2006-01-02"))
+			} else {
+				buckets[i].Label = shortDayLabel(sp.start.Format("2006-01-02")) + "-" + shortDayLabel(sp.end.Format("2006-01-02"))
+			}
+		}
+		for _, row := range rows {
+			rd, err := time.Parse("2006-01-02", trendDayKey(row.CreatedAt))
+			if err != nil {
+				continue
+			}
+			for i, sp := range spans {
+				if !rd.Before(sp.start) && !rd.After(sp.end) {
+					if row.Type == "income" {
+						buckets[i].Income += row.Amount
+					} else if row.Type == "expense" {
+						buckets[i].Expense += row.Amount
+					}
+					break
+				}
+			}
+		}
+		return buckets, nil
+	default:
+		// Bucket bulanan: YYYY-MM urut.
+		keys := []string{}
+		agg := map[string]*TrendBucket{}
+		for d := time.Date(fd.Year(), fd.Month(), 1, 0, 0, 0, 0, fd.Location()); !d.After(td); d = d.AddDate(0, 1, 0) {
+			k := d.Format("2006-01")
+			keys = append(keys, k)
+			agg[k] = &TrendBucket{Label: d.Format("Jan 2006")}
+		}
+		sort.Strings(keys)
+		// keys sudah urut karena dibangun kronologis; sort jaga-jaga.
+		for _, row := range rows {
+			k := ""
+			if t, err := time.Parse(time.RFC3339, row.CreatedAt); err == nil {
+				k = t.Format("2006-01")
+			} else if len(row.CreatedAt) >= 7 {
+				k = row.CreatedAt[:7]
+			}
+			b, ok := agg[k]
+			if !ok {
+				continue
+			}
+			if row.Type == "income" {
+				b.Income += row.Amount
+			} else if row.Type == "expense" {
+				b.Expense += row.Amount
+			}
+		}
+		out := make([]TrendBucket, 0, len(keys))
+		for _, k := range keys {
+			out = append(out, *agg[k])
+		}
+		return out, nil
+	}
 }

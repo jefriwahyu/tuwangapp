@@ -25,12 +25,36 @@ export async function sendMessage(text, period = '') {
     return res.json();
 }
 
-export async function getSummary(period = 'month') {
-    const res = await fetch(`${BASE_URL}/summary?period=${period}`, {
+export async function getSummary(period = 'month', range = null) {
+    const params = new URLSearchParams();
+    if (range?.from && range?.to) {
+        params.set('from', range.from);
+        params.set('to', range.to);
+    } else {
+        params.set('period', period);
+    }
+    const res = await fetch(`${BASE_URL}/summary?${params.toString()}`, {
         headers: await authHeader(),
     });
     if (!res.ok) {
         throw new Error('Gagal memuat ringkasan');
+    }
+    return res.json();
+}
+
+export async function getTrend(period = 'month', range = null) {
+    const params = new URLSearchParams();
+    if (range?.from && range?.to) {
+        params.set('from', range.from);
+        params.set('to', range.to);
+    } else {
+        params.set('period', period);
+    }
+    const res = await fetch(`${BASE_URL}/trend?${params.toString()}`, {
+        headers: await authHeader(),
+    });
+    if (!res.ok) {
+        throw new Error('Gagal memuat tren');
     }
     return res.json();
 }

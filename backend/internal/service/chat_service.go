@@ -15,7 +15,14 @@ func ProcessMessage(userID string, req model.ChatRequest) model.ChatResponse {
 	extracted, err := ExtractTransaction(req.Message)
 	if err != nil {
 		log.Println("Groq error:", err)
+		if guessLang(req.Message) == "en" {
+			return model.ChatResponse{Reply: "Sorry, I had trouble reaching the AI. Please try again."}
+		}
 		return model.ChatResponse{Reply: "Maaf, ada masalah waktu menghubungi AI"}
+	}
+	// LLM lama kadang mengosongkan lang — tebak dari teks user.
+	if strings.TrimSpace(extracted.Lang) == "" {
+		extracted.Lang = guessLang(req.Message)
 	}
 
 	switch extracted.Intent {
@@ -23,28 +30,36 @@ func ProcessMessage(userID string, req model.ChatRequest) model.ChatResponse {
 		return handleTransactionIntent(userID, req.Period, extracted)
 
 	case "query_report":
-		income, expense, err := repository.GetSummary(userID, extracted.Period)
+		period := normalizeReportPeriod(extracted.Period, req.Period)
+		income, expense, incomeCount, expenseCount, err := repository.GetSummary(userID, period)
 		if err != nil {
 			log.Println("Gagal ambil rekap:", err)
+			if langIsEnglish(extracted.Lang) {
+				return model.ChatResponse{Reply: "Oops, I failed to fetch your recap."}
+			}
 			return model.ChatResponse{Reply: "Waduh, gagal ambil data rekap."}
 		}
-		breakdown, err := repository.GetCategoryBreakdown(userID, extracted.Period)
+		breakdown, err := repository.GetCategoryBreakdown(userID, period)
 		if err != nil {
 			log.Println("Gagal ambil breakdown:", err)
 			breakdown = nil
 		}
-		reply := fmt.Sprintf(
-			"Rekap %s:\nPemasukan: Rp%.0f\nPengeluaran: Rp%.0f",
-			periodLabel(extracted.Period), income, expense,
-		)
+		// LLM diminta mengisi reply intro tanpa angka dalam bahasa user.
+		// Kalau kosong (contoh lama), backend yang buatkan versi id/en.
+		reply := strings.TrimSpace(extracted.Reply)
+		if reply == "" {
+			reply = randomReportIntro(period, extracted.Lang)
+		}
 		return model.ChatResponse{
 			Reply:  reply,
-			Period: extracted.Period,
+			Period: period,
 			Summary: &model.SummarySnapshot{
-				Period:    extracted.Period,
-				Income:    income,
-				Expense:   expense,
-				Breakdown: breakdown,
+				Period:       period,
+				Income:       income,
+				Expense:      expense,
+				IncomeCount:  incomeCount,
+				ExpenseCount: expenseCount,
+				Breakdown:    breakdown,
 			},
 		}
 
@@ -124,7 +139,23 @@ func handleTransactionIntent(userID string, activePeriod string, extracted Extra
 		Reply:      reply,
 		Summary:    freshSummary(userID, activePeriod),
 		SavedCount: len(valid),
+		Saved:      toSaved(valid),
 	}
+}
+
+// toSaved menyalin item valid ke respons agar frontend bisa merender
+// kartu struk persis mock (nama + kategori + nominal + status Tersimpan).
+func toSaved(valid []TransactionItem) []model.SavedTransaction {
+	out := make([]model.SavedTransaction, 0, len(valid))
+	for _, v := range valid {
+		out = append(out, model.SavedTransaction{
+			Type:        v.Type,
+			Amount:      v.Amount,
+			Category:    v.Category,
+			Description: v.Description,
+		})
+	}
+	return out
 }
 
 // multiReply membangun balasan dari data valid (backend sumber kebenaran).
@@ -147,7 +178,7 @@ func freshSummary(userID string, activePeriod string) *model.SummarySnapshot {
 	default:
 		period = "month"
 	}
-	income, expense, err := repository.GetSummary(userID, period)
+	income, expense, incomeCount, expenseCount, err := repository.GetSummary(userID, period)
 	if err != nil {
 		log.Println("Gagal ambil ringkasan inline:", err)
 		return nil
@@ -158,10 +189,12 @@ func freshSummary(userID string, activePeriod string) *model.SummarySnapshot {
 		breakdown = nil
 	}
 	return &model.SummarySnapshot{
-		Period:    period,
-		Income:    income,
-		Expense:   expense,
-		Breakdown: breakdown,
+		Period:       period,
+		Income:       income,
+		Expense:      expense,
+		IncomeCount:  incomeCount,
+		ExpenseCount: expenseCount,
+		Breakdown:    breakdown,
 	}
 }
 
@@ -298,4 +331,87 @@ func periodLabel(period string) string {
 	default:
 		return "hari ini"
 	}
+}
+
+// periodLabelEn pasangan periodLabel untuk balasan bahasa Inggris.
+func periodLabelEn(period string) string {
+	switch period {
+	case "yesterday":
+		return "yesterday"
+	case "month":
+		return "this month"
+	case "week":
+		return "the last 7 days"
+	case "year":
+		return "this year"
+	default:
+		return "today"
+	}
+}
+
+// langIsEnglish true untuk kode bahasa Inggris (en, en-US, ...).
+func langIsEnglish(lang string) bool {
+	l := strings.ToLower(strings.TrimSpace(lang))
+	return l == "en" || strings.HasPrefix(l, "en-") || strings.HasPrefix(l, "en_")
+}
+
+// guessLang tebakan kasar bahasa pesan user bila LLM mengosongkan lang.
+// "en" kalau penanda Inggris lebih banyak, selain itu "id" (default lama).
+// Bahasa lain selain keduanya tetap dijawab LLM via extracted.Reply,
+// backend hanya butuh pembeda id vs non-id untuk template hardcoded.
+func guessLang(msg string) string {
+	lower := strings.ToLower(msg)
+	idMarks := []string{"aku", "saya", "kamu", "beli", "berapa", "rekap", "bulan", "kemarin", "hari ini", "uang", "saldo", "tolong", "coba", "lihat", "tadi", "dong", "hapus", "gaji", "kopi", "makan", "bayar", "dapat", "pemasukan", "pengeluaran", "tercatat", "nggak", "udah", "aja"}
+	enMarks := []string{"bought", "buy ", "how much", "how many", "what is", "what's", "balance", "recap", "summary", "month", "yesterday", "today", "money", "please", "show me", "coffee", "delete", "remove", "salary", "expense", "income", "i spent", "i paid", "i got", "my "}
+	idCount, enCount := 0, 0
+	for _, w := range idMarks {
+		if strings.Contains(lower, w) {
+			idCount++
+		}
+	}
+	for _, w := range enMarks {
+		if strings.Contains(lower, w) {
+			enCount++
+		}
+	}
+	if enCount > idCount {
+		return "en"
+	}
+	return "id"
+}
+
+// randomReportIntro intro rekap tanpa angka (angka ada di kartu).
+// Bahasa mengikuti pesan user; default Indonesia.
+func randomReportIntro(period, lang string) string {
+	if langIsEnglish(lang) {
+		label := periodLabelEn(period)
+		en := []string{
+			"Done! Your recap for %s is in the card below, take a peek at your balance there.",
+			"Here is your recap for %s — income, expense, and balance details are in the card below.",
+			"All set! Check the card below for your full %s recap.",
+		}
+		return fmt.Sprintf(en[int(time.Now().UnixNano())%len(en)], label)
+	}
+	label := periodLabel(period)
+	id := []string{
+		"Beres! Rekap %s sudah aku rangkum di kartu bawah ya, silakan intip sisa saldomu di sana.",
+		"Nih rekap %s kamu — detail pemasukan, pengeluaran, dan sisa saldonya ada di kartu bawah.",
+		"Sudah aku siapkan! Cek kartu di bawah untuk rekap %s lengkapnya ya.",
+	}
+	return fmt.Sprintf(id[int(time.Now().UnixNano())%len(id)], label)
+}
+
+// normalizeReportPeriod memastikan periode rekap selalu valid.
+// LLM kadang mengosongkan period (terutama untuk "sisa saldo") —
+// fallback ke periode aktif frontend, terakhir "month".
+func normalizeReportPeriod(extracted, active string) string {
+	switch extracted {
+	case "today", "yesterday", "week", "month", "year":
+		return extracted
+	}
+	switch active {
+	case "today", "yesterday", "week", "month", "year":
+		return active
+	}
+	return "month"
 }
