@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { deleteTransaction, getTransactions } from '../api';
 import { getCategoryMeta } from '../lib/categoryMeta';
+import { PERIODS } from './SummaryChart';
 
 const PAGE_SIZE = 50;
 
@@ -40,12 +41,11 @@ function fmtDayLong(iso) {
   return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function monthLabel(isoDate) {
+function fmtShort(iso) {
   try {
-    const d = isoDate ? new Date(isoDate + 'T00:00:00') : new Date();
-    return d.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+    return new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
   } catch {
-    return '';
+    return iso;
   }
 }
 
@@ -55,8 +55,9 @@ const TYPE_CHIPS = [
   { id: 'expense', label: 'Pengeluaran' },
 ];
 
+// Riwayat persis mock: search + chip tipe + pil tanggal + total +
+// grup Hari Ini/Kemarin/Sebelumnya + footer CSV/sinkron.
 function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, initialCustom }) {
-  void period;
   const [to, setTo] = useState((initialCustom && initialCustom.to) || todayStr());
   const [from, setFrom] = useState((initialCustom && initialCustom.from) || '');
   const [applied, setApplied] = useState(
@@ -72,9 +73,26 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
   const [error, setError] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [monthOpen, setMonthOpen] = useState(false);
+  const menuRef = useRef(null);
 
-  async function load(reset, filter) {
+  const following = !(applied.from && applied.to);
+  const periodLabel = (PERIODS.find((p) => p.value === period) || {}).label || 'Bulan ini';
+  const rangeLabel = following ? periodLabel : (fmtShort(applied.from) + ' – ' + fmtShort(applied.to));
+
+  // Tutup menu tanggal saat klik di luar.
+  useEffect(() => {
+    if (!monthOpen) return;
+    function onDown(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMonthOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [monthOpen]);
+
+  async function load(reset, filter, base) {
     const f = filter || applied;
+    const list = base !== undefined ? base : items;
     if (reset) {
       setLoading(true);
       setError(false);
@@ -86,7 +104,7 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
         from: f.from,
         to: f.to,
         limit: PAGE_SIZE,
-        offset: reset ? 0 : items.length,
+        offset: reset ? 0 : list.length,
       });
       const rows = data.data || [];
       setItems((prev) => (reset ? rows : [...prev, ...rows]));
@@ -108,13 +126,6 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
   function notifyRange(f) {
     if (onRangeChange) {
       if (f.from && f.to) {
-        const fmtShort = (iso) => {
-          try {
-            return new Date(iso + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-          } catch {
-            return iso;
-          }
-        };
         onRangeChange({ from: f.from, to: f.to, label: (fmtShort(f.from) + ' – ' + fmtShort(f.to)) });
       } else {
         onRangeChange(null);
@@ -123,28 +134,32 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
   }
 
   function applyFilter() {
+    if (!from || !to) return;
     const f = { from, to };
     setApplied(f);
     notifyRange(f);
+    setMonthOpen(false);
   }
 
-  function resetFilter() {
+  // Kembali ikut periode ringkasan aktif.
+  function followSummary() {
     setFrom('');
     setTo(todayStr());
     setApplied({ from: '', to: '' });
     if (onRangeChange) onRangeChange(null);
+    setMonthOpen(false);
   }
 
-  function preset(days) {
+  function monthPreset() {
     const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - (days - 1));
+    const start = new Date(end.getFullYear(), end.getMonth(), 1);
     const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const f = { from: fmt(start), to: fmt(end) };
     setFrom(f.from);
     setTo(f.to);
     setApplied(f);
     notifyRange(f);
+    setMonthOpen(false);
   }
 
   async function handleDelete(tx) {
@@ -160,6 +175,27 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
     } finally {
       setDeletingId(null);
     }
+  }
+
+  // Unduh CSV dari data yang sedang tampil — tombol footer jadi aksi nyata.
+  function handleCsv() {
+    const rows = visible.map((tx) => ({
+      tanggal: tx.created_at || '',
+      tipe: tx.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
+      kategori: tx.category || '',
+      deskripsi: tx.description || '',
+      jumlah: tx.amount || 0,
+    }));
+    const head = 'tanggal,tipe,kategori,deskripsi,jumlah';
+    const esc = (v) => `"${String(v).replace(/"/g, '""')}"`;
+    const body = rows.map((r) => [r.tanggal, r.tipe, r.kategori, r.deskripsi, r.jumlah].map(esc).join(',')).join('\n');
+    const blob = new Blob([head + '\n' + body], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'riwayat-transaksi.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // Saring lokal ala mock: query teks + chip tipe. Filter tanggal tetap
@@ -189,17 +225,6 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
     visible.forEach((tx) => g[groupOf(tx.created_at)].push(tx));
     return g;
   }, [visible]);
-
-  function monthPreset() {
-    const end = new Date();
-    const start = new Date(end.getFullYear(), end.getMonth(), 1);
-    const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const f = { from: fmt(start), to: fmt(end) };
-    setFrom(f.from);
-    setTo(f.to);
-    setApplied(f);
-    notifyRange(f);
-  }
 
   function groupTitle(key) {
     if (key === 'today') return `Hari Ini — ${fmtDayLong(new Date().toISOString())}`;
@@ -243,33 +268,47 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
               </button>
             ))}
           </div>
-          <button type="button" className="hx-month" onClick={monthPreset} title="Tampilkan bulan berjalan">
-            <span className="material-symbols-outlined">calendar_today</span>
-            {monthLabel(applied.from)}
-            <span className="material-symbols-outlined">expand_more</span>
-          </button>
+          <div className="period-wrap" ref={menuRef}>
+            <button
+              type="button"
+              className="hx-month"
+              aria-expanded={monthOpen}
+              aria-haspopup="dialog"
+              onClick={() => setMonthOpen((v) => !v)}
+              title="Filter tanggal"
+            >
+              <span className="material-symbols-outlined">calendar_today</span>
+              {rangeLabel}
+              <span className="material-symbols-outlined">expand_more</span>
+            </button>
+            {monthOpen && (
+              <div className="hx-menu" role="dialog" aria-label="Filter tanggal riwayat">
+                <button type="button" className="hx-follow" onClick={followSummary}>
+                  Ikut ringkasan ({periodLabel})
+                </button>
+                <div className="hx-menu-row">
+                  <label htmlFor="hx-from">Dari</label>
+                  <input id="hx-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                </div>
+                <div className="hx-menu-row">
+                  <label htmlFor="hx-to">Sampai</label>
+                  <input id="hx-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                </div>
+                <div className="hx-menu-actions">
+                  <button type="button" className="hx-apply" onClick={applyFilter} disabled={!from || !to}>
+                    Terapkan
+                  </button>
+                  <button type="button" className="hx-reset" onClick={monthPreset}>
+                    Bulan ini
+                  </button>
+                </div>
+                {!following && (
+                  <p className="hx-applied">Menampilkan {applied.from} – {applied.to}. Ringkasan ikut rentang ini.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-        <details className="hx-dates">
-          <summary>Filter tanggal khusus</summary>
-          <div className="tx-dates">
-            <label>
-              Dari
-              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-            </label>
-            <label>
-              Sampai
-              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-            </label>
-          </div>
-          <div className="tx-actions">
-            <button type="button" className="insight-period" onClick={() => preset(7)}>7 hari</button>
-            <button type="button" className="insight-period" onClick={applyFilter}>Terapkan</button>
-            <button type="button" className="insight-period" onClick={resetFilter}>Reset</button>
-          </div>
-          {applied.from && applied.to && (
-            <p className="hx-applied">Menampilkan {applied.from} – {applied.to}. Ringkasan ikut rentang ini.</p>
-          )}
-        </details>
       </div>
 
       {loading ? (
@@ -296,7 +335,7 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
               </span>
               <div>
                 <span className="hx-total-label">Total Transaksi</span>
-                <span className="hx-total-count">{totals.count} Catatan <em>({monthLabel(applied.from)})</em></span>
+                <span className="hx-total-count">{totals.count} Catatan <em>({rangeLabel})</em></span>
               </div>
             </div>
             <div className="hx-total-net">
@@ -358,6 +397,13 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
               {loadingMore ? 'Memuat...' : 'Muat lagi'}
             </button>
           )}
+          <div className="hx-foot">
+            <button type="button" className="hx-csv" onClick={handleCsv}>
+              <span className="material-symbols-outlined">download</span>
+              Unduh CSV
+            </button>
+            <span className="hx-sync"><span className="dot" /> Sinkronisasi Real-time</span>
+          </div>
         </>
       )}
     </div>

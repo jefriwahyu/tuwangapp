@@ -1,13 +1,6 @@
-import { useEffect, useState } from "react";
-import { Bar, Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement,
-  LineElement, Tooltip, Legend,
-} from 'chart.js';
-import { getSummary, getTrend } from '../api';
+import { useEffect, useRef, useState } from "react";
+import { getSummary, getTransactions } from '../api';
 import { catBarColor, getCategoryMeta } from '../lib/categoryMeta';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip, Legend);
 
 // Satu-satunya daftar periode — dipakai InsightPanel untuk dropdown.
 export const PERIODS = [
@@ -18,14 +11,6 @@ export const PERIODS = [
   { value: 'year', label: 'Tahun ini' },
 ];
 
-const PERIOD_TREND_LABEL = {
-  month: 'Tren mingguan bulan ini',
-  year: 'Tren bulanan tahun ini',
-  today: 'Tren hari ini',
-  yesterday: 'Tren kemarin',
-  week: 'Tren 7 hari terakhir',
-};
-
 function formatRp(n) {
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -34,230 +19,40 @@ function formatRp(n) {
   }).format(n || 0);
 }
 
-function shortRp(n) {
-  const v = Math.abs(n || 0);
-  if (v >= 1000000) return ((n / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + 'jt');
-  if (v >= 1000) return (Math.round(n / 1000) + 'rb');
-  return String(Math.round(n || 0));
+function formatNum(n) {
+  return (n || 0).toLocaleString('id-ID');
 }
 
-// Slide arus kas: ringkasan uang + bar pemasukan vs pengeluaran.
-function FlowSlide({ income, expense, incomeCount, expenseCount, customLabel, onClear, onSeeAll }) {
-  const balance = income - expense;
-  const chartData = {
-    labels: ['Arus kas'],
-    datasets: [
-      { label: 'Pemasukan', data: [income], backgroundColor: '#10b981', borderRadius: 10, barThickness: 26 },
-      { label: 'Pengeluaran', data: [expense], backgroundColor: '#f59e0b', borderRadius: 10, barThickness: 26 },
-    ],
-  };
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom',
-        labels: { boxWidth: 12, boxHeight: 12, borderRadius: 6, useBorderRadius: true, font: { size: 12, weight: 700 } },
-      },
-      tooltip: {
-        callbacks: { label: (ctx) => (' ' + ctx.dataset.label + ': ' + formatRp(ctx.raw)) },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { callback: (v) => shortRp(v), font: { size: 11 }, color: '#94a3b8' },
-        grid: { color: 'rgba(148,163,184,0.15)' },
-      },
-      x: { grid: { display: false }, ticks: { font: { size: 12 }, color: '#64748b' } },
-    },
-  };
-
-  return (
-    <div className="flow-box">
-      <div className="stat-grid">
-        <div className="stat stat-in">
-          <span className="stat-icon">💰</span>
-          <span className="stat-label">Pemasukan{incomeCount > 0 ? (' • ' + incomeCount + 'x') : ''}</span>
-          <strong className="stat-value in">{formatRp(income)}</strong>
-        </div>
-        <div className="stat stat-out">
-          <span className="stat-icon">💸</span>
-          <span className="stat-label">Pengeluaran{expenseCount > 0 ? (' • ' + expenseCount + 'x') : ''}</span>
-          <strong className="stat-value out">{formatRp(expense)}</strong>
-        </div>
-        <div className={'stat stat-balance' + (balance < 0 ? ' neg' : '')}>
-          <span className="stat-icon">{balance < 0 ? '⚠️' : '✨'}</span>
-          <span className="stat-label">Saldo</span>
-          <strong className="stat-value">{formatRp(balance)}</strong>
-        </div>
-      </div>
-      <div className="insight-chart">
-        <Bar data={chartData} options={chartOptions} />
-      </div>
-      {customLabel && (
-        <div className="range-banner">
-          <span className="material-symbols-outlined">date_range</span>
-          <span>Filter riwayat: {customLabel}</span>
-          <button type="button" className="range-clear" onClick={onClear}>Kembali ke preset</button>
-        </div>
-      )}
-      {onSeeAll && (
-        <button type="button" className="tx-more" onClick={onSeeAll}>
-          Lihat semua transaksi
-        </button>
-      )}
-    </div>
-  );
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-// Slide tren: garis pemasukan vs pengeluaran per bucket waktu.
-function TrendSlide({ buckets, trendNote }) {
-  const labels = (buckets || []).map((b) => b.label);
-  const data = {
-    labels,
-    datasets: [
-      {
-        label: 'Pemasukan',
-        data: (buckets || []).map((b) => b.income || 0),
-        borderColor: '#10b981',
-        backgroundColor: 'rgba(16,185,129,0.15)',
-        tension: 0.35,
-        fill: true,
-        pointRadius: 3,
-      },
-      {
-        label: 'Pengeluaran',
-        data: (buckets || []).map((b) => b.expense || 0),
-        borderColor: '#f59e0b',
-        backgroundColor: 'rgba(245,158,11,0.12)',
-        tension: 0.35,
-        fill: true,
-        pointRadius: 3,
-      },
-    ],
-  };
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom',
-        labels: { boxWidth: 12, boxHeight: 12, borderRadius: 6, useBorderRadius: true, font: { size: 12, weight: 700 } },
-      },
-      tooltip: {
-        callbacks: { label: (ctx) => (' ' + ctx.dataset.label + ': ' + formatRp(ctx.raw)) },
-      },
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: { callback: (v) => shortRp(v), font: { size: 11 }, color: '#94a3b8' },
-        grid: { color: 'rgba(148,163,184,0.15)' },
-      },
-      x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b', maxTicksLimit: 6 } },
-    },
-  };
-
-  if (!buckets || buckets.length === 0) {
-    return (
-      <div className="trend-box">
-        <div className="insight-empty">
-          <span>📈</span>
-          <p>Belum ada data tren pada periode ini.</p>
-        </div>
-      </div>
-    );
+// Label relatif ala mock: Hari ini / Kemarin / tanggal singkat.
+function relDay(iso) {
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    if (sameDay(d, now)) return 'Hari ini';
+    const y = new Date(now);
+    y.setDate(now.getDate() - 1);
+    if (sameDay(d, y)) return 'Kemarin';
+    return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+  } catch {
+    return '';
   }
-
-  return (
-    <div className="trend-box">
-      <div className="insight-chart">
-        <Line data={data} options={options} />
-      </div>
-      {trendNote && <p className="trend-note">{trendNote}</p>}
-    </div>
-  );
 }
 
-// Slide kategori: bar horizontal per kategori + ikon Material Symbols.
-function CategorySlide({ breakdown }) {
-  const rows = (breakdown || []).filter((b) => b.type === 'expense' && b.total > 0);
-  const catLabels = rows.map((b) => b.category);
-  const catTotals = rows.map((b) => b.total);
-  const catData = {
-    labels: catLabels,
-    datasets: [
-      {
-        label: 'Pengeluaran',
-        data: catTotals,
-        backgroundColor: catLabels.map((_, i) => catBarColor(i)),
-        borderRadius: 8,
-      },
-    ],
-  };
-  const catOptions = {
-    indexAxis: 'y',
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: (ctx) => (' ' + formatRp(ctx.raw)) } },
-    },
-    scales: {
-      x: {
-        beginAtZero: true,
-        ticks: { callback: (v) => shortRp(v), font: { size: 11 }, color: '#94a3b8', maxTicksLimit: 5 },
-        grid: { color: 'rgba(148,163,184,0.15)' },
-      },
-      y: { grid: { display: false }, ticks: { font: { size: 12 }, color: '#334155', autoSkip: false } },
-    },
-  };
-
-  if (rows.length === 0) {
-    return (
-      <div className="insight-empty">
-        <span>🧾</span>
-        <p>Belum ada pengeluaran berkategori pada periode ini.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <ul className="cat-list">
-        {rows.map((b, i) => {
-          const meta = getCategoryMeta(b.category);
-          return (
-            <li key={(b.category + '-' + i)} className="cat-row">
-              <span className="cat-ico" style={{ background: meta.bg, color: meta.fg }}>
-                <span className="material-symbols-outlined">{meta.msym}</span>
-              </span>
-              <span className="cat-name">{b.category}</span>
-              <strong className="cat-total">{formatRp(b.total)}</strong>
-            </li>
-          );
-        })}
-      </ul>
-      <h4 className="insight-subtitle">Grafik per kategori</h4>
-      <div className="insight-chart insight-chart-cat">
-        <Bar data={catData} options={catOptions} />
-      </div>
-    </div>
-  );
+function pct1(v) {
+  return String(parseFloat(v.toFixed(1)));
 }
 
-const SLIDES = [
-  { id: 'flow', label: 'Arus kas' },
-  { id: 'trend', label: 'Tren' },
-  { id: 'category', label: 'Kategori' },
-];
-
+// Panel ringkasan persis mock: KPI 3 kolom + arus kas + kategori + aktivitas.
+// Tanpa carousel, tanpa Chart.js — bar digambar dengan CSS murni.
 function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onSeeAll, refreshKey, liveSnapshot }) {
-  const [slide, setSlide] = useState(0);
   const [summary, setSummary] = useState(initialSummary || null);
-  const [buckets, setBuckets] = useState([]);
+  const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const appliedSeq = useRef(0);
 
   const custom = rangeOverride && rangeOverride.from && rangeOverride.to ? rangeOverride : null;
 
@@ -265,16 +60,19 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
     let alive = true;
     setLoading(true);
     const range = custom ? { from: custom.from, to: custom.to } : null;
-    Promise.all([getSummary(period, range), getTrend(period, range)])
-      .then(([sum, trend]) => {
+    Promise.all([
+      getSummary(period, range),
+      getTransactions({ ...(range || {}), limit: 3, offset: 0 }),
+    ])
+      .then(([sum, tx]) => {
         if (!alive) return;
         setSummary(sum);
-        setBuckets((trend && trend.buckets) || []);
+        setActivity((tx && tx.data) || []);
       })
       .catch(() => {
         if (!alive) return;
         setSummary(null);
-        setBuckets([]);
+        setActivity([]);
       })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -286,97 +84,208 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
     if (initialSummary && !custom) setSummary(initialSummary);
   }, [initialSummary, custom]);
 
-  // Tempel ringkasan inline dari respons chat — tanpa fetch ulang.
-  // Pola "adjust state saat props berubah": hanya dijalankan saat seq
-  // baru datang dan periodenya cocok, supaya tiap respons diterapkan
-  // walau angkanya sama, dan periode beda diabaikan.
-  const [appliedSeq, setAppliedSeq] = useState(0);
-  if (liveSnapshot && liveSnapshot.summary
-    && liveSnapshot.seq > appliedSeq
-    && liveSnapshot.summary.period === period
-    && !custom) {
-    setAppliedSeq(liveSnapshot.seq);
-    setSummary(liveSnapshot.summary);
-    setLoading(false);
-  }
+  // Tempel ringkasan inline dari respons chat — hanya saat seq baru
+  // datang dan periodenya cocok, supaya tiap respons diterapkan.
+  useEffect(() => {
+    if (liveSnapshot && liveSnapshot.summary
+      && liveSnapshot.seq > appliedSeq.current
+      && liveSnapshot.summary.period === period
+      && !custom) {
+      appliedSeq.current = liveSnapshot.seq;
+      setSummary(liveSnapshot.summary);
+      setLoading(false);
+    }
+  }, [liveSnapshot, period, custom]);
 
   const income = (summary && summary.income) || 0;
   const expense = (summary && summary.expense) || 0;
   const incomeCount = (summary && summary.income_count) || 0;
   const expenseCount = (summary && summary.expense_count) || 0;
-  const trendNote = custom
-    ? ('Tren ' + custom.from + ' ke ' + custom.to)
-    : (PERIOD_TREND_LABEL[period] || PERIOD_TREND_LABEL.month);
+  const balance = income - expense;
 
-  function go(dir) {
-    setSlide((s) => (s + dir + SLIDES.length) % SLIDES.length);
-  }
+  const periodLabel = (PERIODS.find((p) => p.value === period) || {}).label || 'Bulan ini';
+  const rangeSub = custom ? (custom.label || (custom.from + ' – ' + custom.to)) : null;
+  const ratioSub = custom ? ('Rasio ' + rangeSub) : ('Rasio ' + periodLabel);
 
-  return (
-    <div className="insight-card">
-      <div className="insight-head">
-        <div>
-          <h3 className="insight-title">Ringkasan Keuangan</h3>
-          <p className="insight-sub">Pantau arus kasmu secara real-time</p>
-        </div>
-      </div>
+  const surplusPct = income > 0 ? (balance / income) * 100 : 0;
+  const health = (() => {
+    if (income === 0 && expense === 0) return { cls: 'health-neutral', text: 'Belum ada data' };
+    if (income === 0) return { cls: 'health-bad', text: 'Perlu perhatian' };
+    const r = expense / income;
+    if (r <= 0.5) return { cls: 'health-good', text: 'Kondisi Sehat' };
+    if (r <= 0.8) return { cls: 'health-warn', text: 'Waspada' };
+    return { cls: 'health-bad', text: 'Boros' };
+  })();
 
-      {loading ? (
+  const maxFlow = Math.max(income, expense, 1);
+  const incomePct = (income / maxFlow) * 100;
+  const expensePct = (expense / maxFlow) * 100;
+  const barH = (pct, v) => (v > 0 ? Math.max(6, Math.round((pct / 100) * 86)) : 4);
+
+  const catRows = ((summary && summary.breakdown) || []).filter((b) => b.type === 'expense' && b.total > 0);
+
+  if (loading) {
+    return (
+      <div className="sum">
         <div className="insight-skeleton">
           <div className="sk sk-card" />
           <div className="sk sk-card" />
           <div className="sk sk-chart" />
         </div>
-      ) : !summary ? (
+      </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <div className="sum">
         <div className="insight-empty">
-          <span>📭</span>
+          <span className="material-symbols-outlined">inbox</span>
           <p>Gagal memuat rekap. Pastikan backend berjalan.</p>
         </div>
-      ) : (
-        <>
-          <div className="carousel-bar">
-            <button type="button" className="carousel-nav" aria-label="Slide sebelumnya" onClick={() => go(-1)}>
-              <span className="material-symbols-outlined">chevron_left</span>
-            </button>
-            <div className="carousel-tabs" role="tablist" aria-label="Jenis ringkasan">
-              {SLIDES.map((s, i) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={i === slide}
-                  className={i === slide ? 'carousel-tab active' : 'carousel-tab'}
-                  onClick={() => setSlide(i)}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="carousel-nav" aria-label="Slide berikutnya" onClick={() => go(1)}>
-              <span className="material-symbols-outlined">chevron_right</span>
-            </button>
-          </div>
+      </div>
+    );
+  }
 
-          <div className="carousel-slide">
-            {slide === 0 && (
-              <FlowSlide
-                income={income}
-                expense={expense}
-                incomeCount={incomeCount}
-                expenseCount={expenseCount}
-                customLabel={custom && custom.label}
-                onClear={onClearRange}
-                onSeeAll={onSeeAll}
-              />
-            )}
-            {slide === 1 && <TrendSlide buckets={buckets} trendNote={trendNote} />}
-            {slide === 2 && <CategorySlide breakdown={summary && summary.breakdown} />}
+  return (
+    <div className="sum">
+      <div className="kpi-grid">
+        <div className="kpi kpi-in">
+          <span className="kpi-label">Pemasukan</span>
+          <div>
+            <span className="kpi-value in">+{formatNum(income)}</span>
+            <span className="kpi-sub">{incomeCount} kali log</span>
           </div>
-          <p className="insight-tip">
-            Tips: ketik <code>rekap bulan ini</code> di chat untuk update otomatis.
-          </p>
-        </>
-      )}
+        </div>
+        <div className="kpi kpi-out">
+          <span className="kpi-label">Pengeluaran</span>
+          <div>
+            <span className="kpi-value out">-{formatNum(expense)}</span>
+            <span className="kpi-sub">{expenseCount} kali log</span>
+          </div>
+        </div>
+        <div className="kpi kpi-net">
+          <span className="kpi-label">Sisa Saldo</span>
+          <div>
+            <span className="kpi-value net">{formatNum(balance)}</span>
+            <span className={'kpi-sub' + (balance >= 0 && income > 0 ? ' pos' : '')}>
+              {balance >= 0 ? ('Surplus ' + pct1(surplusPct) + '%') : ('Defisit ' + pct1(Math.abs(surplusPct)) + '%')}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="block">
+        <div className="block-head">
+          <div>
+            <h3 className="block-title">Perbandingan Arus Kas</h3>
+            <span className="block-sub">{ratioSub}</span>
+          </div>
+          <span className={'health ' + health.cls}>{health.text}</span>
+        </div>
+        <div className="flow-box">
+          <div className="flow-col">
+            <span className="flow-pct in">{pct1(incomePct)}%</span>
+            <div className="flow-track">
+              <div className="flow-fill in" style={{ height: barH(incomePct, income) + 'px' }}>
+                <span className="material-symbols-outlined">arrow_downward</span>
+              </div>
+            </div>
+            <span className="flow-name">Masuk</span>
+            <span className="flow-amt in">{formatNum(income)}</span>
+          </div>
+          <div className="flow-col">
+            <span className="flow-pct out">{pct1(expensePct)}%</span>
+            <div className="flow-track">
+              <div className="flow-fill out" style={{ height: barH(expensePct, expense) + 'px' }}>
+                <span className="material-symbols-outlined">arrow_upward</span>
+              </div>
+            </div>
+            <span className="flow-name">Keluar</span>
+            <span className="flow-amt out">{formatNum(expense)}</span>
+          </div>
+        </div>
+        {custom && (
+          <div className="range-banner">
+            <span className="material-symbols-outlined">date_range</span>
+            <span>Filter riwayat: {rangeSub}</span>
+            <button type="button" className="range-clear" onClick={onClearRange}>Kembali ke preset</button>
+          </div>
+        )}
+      </div>
+
+      <div className="block">
+        <div className="block-head">
+          <h3 className="block-title">Pengeluaran per Kategori</h3>
+          <span className="block-sub">Total: {formatRp(expense)}</span>
+        </div>
+        {catRows.length === 0 ? (
+          <p className="block-empty">Belum ada pengeluaran berkategori pada periode ini.</p>
+        ) : (
+          <div className="cat-list">
+            {catRows.map((b, i) => {
+              const meta = getCategoryMeta(b.category);
+              const pct = expense > 0 ? (b.total / expense) * 100 : 0;
+              return (
+                <div key={b.category + '-' + i}>
+                  <div className="cat-top">
+                    <span className="cat-name">
+                      <span className="cat-ico" style={{ background: meta.bg, color: meta.fg }}>
+                        <span className="material-symbols-outlined">{meta.msym}</span>
+                      </span>
+                      {b.category}
+                    </span>
+                    <span>
+                      <span className="cat-val">{formatRp(b.total)}</span>
+                      <span className="cat-pct">({pct1(pct)}%)</span>
+                    </span>
+                  </div>
+                  <div className="cat-track">
+                    <div className="cat-fill" style={{ width: pct + '%', background: catBarColor(i) }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="block">
+        <div className="block-head">
+          <h3 className="block-title">Aktivitas Terakhir</h3>
+          {onSeeAll && (
+            <button type="button" className="link-btn" onClick={onSeeAll}>Lihat Semua</button>
+          )}
+        </div>
+        {activity.length === 0 ? (
+          <p className="block-empty">Belum ada aktivitas pada periode ini.</p>
+        ) : (
+          <div className="act-list">
+            {activity.map((tx) => {
+              const meta = getCategoryMeta(tx.category);
+              const isIn = tx.type === 'income';
+              return (
+                <div key={tx.id} className="act-item">
+                  <div className="act-left">
+                    <span className="act-ico" style={{ background: meta.bg, color: meta.fg }}>
+                      <span className="material-symbols-outlined">{meta.msym}</span>
+                    </span>
+                    <div>
+                      <span className="act-name">{tx.description || tx.category || (isIn ? 'Pemasukan' : 'Pengeluaran')}</span>
+                      <span className={'act-sub' + (isIn ? ' in' : ' out')}>
+                        {isIn ? 'Pemasukan' : 'Pengeluaran'} • {relDay(tx.created_at)}
+                      </span>
+                    </div>
+                  </div>
+                  <strong className={'act-amt' + (isIn ? ' in' : ' out')}>
+                    {isIn ? '+' : '-'}{formatRp(tx.amount)}
+                  </strong>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
