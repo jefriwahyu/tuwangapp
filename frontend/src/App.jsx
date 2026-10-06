@@ -223,10 +223,6 @@ function App() {
             </div>
 
             <div className="quick-row">
-              <span className="quick-label">
-                <span className="material-symbols-outlined">bolt</span>
-                Coba klik:
-              </span>
               {QUICK_PROMPTS.map((q) => (
                 <button
                   key={q.text}
