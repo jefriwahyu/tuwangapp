@@ -157,7 +157,7 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
                       role="option"
                       aria-selected={p.value === period}
                       className={p.value === period ? 'period-item active' : 'period-item'}
-                      onClick={() => { onPeriodChange(p.value); setPeriodOpen(false); }}
+                      onClick={() => { onPeriodChange(p.value); setHistoryRange(null); setPeriodOpen(false); }}
                     >
                       {p.label}
                       {p.value === period && <span className="material-symbols-outlined">check</span>}

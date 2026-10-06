@@ -62,7 +62,7 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
     const range = custom ? { from: custom.from, to: custom.to } : null;
     Promise.all([
       getSummary(period, range),
-      getTransactions({ ...(range || {}), limit: 3, offset: 0 }),
+      getTransactions({ ...(range || {}), period: range ? '' : period, limit: 3, offset: 0 }),
     ])
       .then(([sum, tx]) => {
         if (!alive) return;

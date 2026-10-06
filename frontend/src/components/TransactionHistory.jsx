@@ -80,6 +80,17 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
   const periodLabel = (PERIODS.find((p) => p.value === period) || {}).label || 'Bulan ini';
   const rangeLabel = following ? periodLabel : (fmtShort(applied.from) + ' – ' + fmtShort(applied.to));
 
+  // Sinkron dengan override dari induk: ganti periode ringkasan = custom
+  // dibersihkan, riwayat balik ikut periode aktif tanpa tombol ikuti.
+  useEffect(() => {
+    const next = initialCustom && initialCustom.from && initialCustom.to
+      ? { from: initialCustom.from, to: initialCustom.to }
+      : { from: '', to: '' };
+    setFrom(next.from);
+    setTo(next.to || todayStr());
+    setApplied((prev) => (prev.from === next.from && prev.to === next.to ? prev : next));
+  }, [initialCustom]);
+
   // Tutup menu tanggal saat klik di luar.
   useEffect(() => {
     if (!monthOpen) return;
@@ -103,6 +114,7 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
       const data = await getTransactions({
         from: f.from,
         to: f.to,
+        period: f.from || f.to ? '' : period,
         limit: PAGE_SIZE,
         offset: reset ? 0 : list.length,
       });
@@ -117,11 +129,11 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
     }
   }
 
-  // Muat ulang saat filter diterapkan atau ada transaksi baru dari chat.
+  // Muat ulang saat periode ringkasan / filter tanggal berubah / ada transaksi baru.
   useEffect(() => {
     load(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applied, refreshKey]);
+  }, [applied, period, refreshKey]);
 
   function notifyRange(f) {
     if (onRangeChange) {
@@ -138,15 +150,6 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
     const f = { from, to };
     setApplied(f);
     notifyRange(f);
-    setMonthOpen(false);
-  }
-
-  // Kembali ikut periode ringkasan aktif.
-  function followSummary() {
-    setFrom('');
-    setTo(todayStr());
-    setApplied({ from: '', to: '' });
-    if (onRangeChange) onRangeChange(null);
     setMonthOpen(false);
   }
 
@@ -283,9 +286,6 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
             </button>
             {monthOpen && (
               <div className="hx-menu" role="dialog" aria-label="Filter tanggal riwayat">
-                <button type="button" className="hx-follow" onClick={followSummary}>
-                  Ikut ringkasan ({periodLabel})
-                </button>
                 <div className="hx-menu-row">
                   <label htmlFor="hx-from">Dari</label>
                   <input id="hx-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />

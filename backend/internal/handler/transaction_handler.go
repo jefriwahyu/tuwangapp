@@ -10,7 +10,9 @@ import (
 	"tuwangapp/backend/internal/repository"
 )
 
-// GET /api/v1/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD&limit=10&offset=0
+// GET /api/v1/transactions?from=YYYY-MM-DD&to=YYYY-MM-DD&period=month&limit=10&offset=0
+// Kalau from/to diisi, pakai rentang bebas. Kalau kosong tapi period
+// diisi, ikut preset ringkasan (today/yesterday/week/month/year).
 func GetTransactionsHandler(c *gin.Context) {
 	userID := c.GetString("user_id")
 
@@ -20,6 +22,7 @@ func GetTransactionsHandler(c *gin.Context) {
 	rows, err := repository.GetTransactions(userID, repository.ListFilter{
 		From:   c.Query("from"),
 		To:     c.Query("to"),
+		Period: c.Query("period"),
 		Limit:  limit,
 		Offset: offset,
 	})

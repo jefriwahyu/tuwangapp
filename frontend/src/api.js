@@ -59,10 +59,11 @@ export async function getTrend(period = 'month', range = null) {
     return res.json();
 }
 
-export async function getTransactions({ from = '', to = '', limit = 10, offset = 0 } = {}) {
+export async function getTransactions({ from = '', to = '', period = '', limit = 10, offset = 0 } = {}) {
     const params = new URLSearchParams();
     if (from) params.set('from', from);
     if (to) params.set('to', to);
+    if (!from && !to && period) params.set('period', period);
     params.set('limit', String(limit));
     params.set('offset', String(offset));
     const res = await fetch(`${BASE_URL}/transactions?${params.toString()}`, {

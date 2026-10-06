@@ -324,6 +324,7 @@ func GetCategoryBreakdownCustom(userID, from, to string) ([]CategoryBreakdown, e
 type ListFilter struct {
 	From   string // YYYY-MM-DD, opsional
 	To     string // YYYY-MM-DD, opsional (inklusif)
+	Period string // preset ringkasan: today/yesterday/week/month/year, dipakai kalau From/To kosong
 	Limit  int
 	Offset int
 }
@@ -351,17 +352,23 @@ func GetTransactions(userID string, f ListFilter) ([]TransactionRow, error) {
 	q := u.Query()
 	q.Set("select", "id,type,amount,category,description,created_at")
 	q.Set("user_id", "eq."+userID)
-	if f.From != "" {
-		q.Add("created_at", "gte."+f.From+"T00:00:00+07:00")
-	}
-	if f.To != "" {
-		// Sampai akhir hari To: pakai lt awal hari berikutnya.
-		d, err := time.Parse("2006-01-02", f.To)
-		if err != nil {
-			return nil, fmt.Errorf("format to tidak valid (pakai YYYY-MM-DD)")
+	if f.From != "" || f.To != "" {
+		if f.From != "" {
+			q.Add("created_at", "gte."+f.From+"T00:00:00+07:00")
 		}
-		next := d.AddDate(0, 0, 1).Format("2006-01-02")
-		q.Add("created_at", "lt."+next+"T00:00:00+07:00")
+		if f.To != "" {
+			// Sampai akhir hari To: pakai lt awal hari berikutnya.
+			d, err := time.Parse("2006-01-02", f.To)
+			if err != nil {
+				return nil, fmt.Errorf("format to tidak valid (pakai YYYY-MM-DD)")
+			}
+			next := d.AddDate(0, 0, 1).Format("2006-01-02")
+			q.Add("created_at", "lt."+next+"T00:00:00+07:00")
+		}
+	} else if f.Period != "" {
+		start, end := periodRange(f.Period)
+		q.Add("created_at", "gte."+start)
+		q.Add("created_at", "lt."+end)
 	}
 	q.Set("order", "created_at.desc")
 	q.Set("limit", strconv.Itoa(f.Limit))
