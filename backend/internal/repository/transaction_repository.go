@@ -452,6 +452,10 @@ func DeleteTransaction(userID string, id string) error {
 
 func periodRange(period string) (start, end string) {
 	now := time.Now()
+	// Buffer 5 menit untuk batas akhir: menutup jeda baca-tulis Supabase
+	// (jam DB bisa sedetik lebih maju dari backend) supaya transaksi yang
+	// baru tersimpan tidak kelewat filter `lt` pada fetch pertama.
+	endBuffered := now.Add(5 * time.Minute)
 	var startTime, endTime time.Time
 
 	switch period {
@@ -463,16 +467,16 @@ func periodRange(period string) (start, end string) {
 		// 7 hari terakhir termasuk hari ini: awal hari 6 hari lalu s/d sekarang.
 		weekAgo := now.AddDate(0, 0, -6)
 		startTime = time.Date(weekAgo.Year(), weekAgo.Month(), weekAgo.Day(), 0, 0, 0, 0, now.Location())
-		endTime = now
+		endTime = endBuffered
 	case "month":
 		startTime = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		endTime = now
+		endTime = endBuffered
 	case "year":
 		startTime = time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
-		endTime = now
+		endTime = endBuffered
 	default: // "today"
 		startTime = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		endTime = now
+		endTime = endBuffered
 	}
 	return startTime.Format(time.RFC3339), endTime.Format(time.RFC3339)
 }

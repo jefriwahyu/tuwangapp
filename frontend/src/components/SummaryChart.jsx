@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getSummary, getTransactions } from '../api';
+import { getSummary, getTransactions, getTrend } from '../api';
 import { catBarColor, getCategoryMeta } from '../lib/categoryMeta';
 
 // Satu-satunya daftar periode — dipakai InsightPanel untuk dropdown.
@@ -21,6 +21,110 @@ function formatRp(n) {
 
 function formatNum(n) {
   return (n || 0).toLocaleString('id-ID');
+}
+
+// Ringkas angka sumbu grafik: 1,2jt / 850rb.
+function shortRp(n) {
+  const v = Math.abs(n || 0);
+  if (v >= 1000000) return ((n / 1000000).toLocaleString('id-ID', { maximumFractionDigits: 1 }) + 'jt');
+  if (v >= 1000) return (Math.round(n / 1000) + 'rb');
+  return String(Math.round(n || 0));
+}
+
+// Grafik garis SVG murni: 2 seri (pemasukan hijau, pengeluaran merah),
+// tiap bucket jadi 1 titik dan titik-titik dihubungkan garis.
+function TrendChart({ buckets, mode }) {
+  const W = 560;
+  const H = 220;
+  const PADL = 44;
+  const PADR = 12;
+  const PADT = 14;
+  const PADB = 28;
+  const iw = W - PADL - PADR;
+  const ih = H - PADT - PADB;
+  const n = buckets.length;
+  const showIn = mode !== 'expense';
+  const showOut = mode !== 'income';
+  const maxV = Math.max(1, ...buckets.map((b) => Math.max(showIn ? (b.income || 0) : 0, showOut ? (b.expense || 0) : 0)));
+  const x = (i) => (n === 1 ? PADL + iw / 2 : PADL + (i * iw) / (n - 1));
+  const y = (v) => PADT + ih - ((v || 0) / maxV) * ih;
+  const coords = (key) => buckets.map((b, i) => [x(i), y(b[key] || 0)]);
+  const pts = (key) => coords(key).map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  // Panjang garis untuk efek draw saat pertama dibuka.
+  const pathLen = (key) => {
+    const c = coords(key);
+    let L = 0;
+    for (let i = 1; i < c.length; i++) L += Math.hypot(c[i][0] - c[i - 1][0], c[i][1] - c[i - 1][1]);
+    return L.toFixed(1);
+  };
+  const inLen = showIn ? pathLen('income') : 0;
+  const outLen = showOut ? pathLen('expense') : 0;
+  // Label sumbu-X direnggangkan kalau titik banyak (custom harian).
+  const step = n > 12 ? Math.ceil(n / 12) : 1;
+
+  return (
+    <svg key={`${mode}-${n}`} viewBox={`0 0 ${W} ${H}`} className="trend-svg" role="img" aria-label="Grafik tren keuangan">
+      {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+        const gy = PADT + ih - f * ih;
+        const gv = maxV * f;
+        return (
+          <g key={f}>
+            <line x1={PADL} y1={gy} x2={W - PADR} y2={gy} stroke={f === 0 ? '#cbd5e1' : 'rgba(148,163,184,.25)'} strokeWidth="1" />
+            <text x={PADL - 6} y={gy + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{shortRp(gv)}</text>
+          </g>
+        );
+      })}
+      {showIn && (
+        <polyline
+          points={pts('income')}
+          fill="none"
+          stroke="#059669"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="trend-line"
+          style={{ strokeDasharray: inLen, strokeDashoffset: inLen }}
+        />
+      )}
+      {showOut && (
+        <polyline
+          points={pts('expense')}
+          fill="none"
+          stroke="#e11d48"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="trend-line trend-line-out"
+          style={{ strokeDasharray: outLen, strokeDashoffset: outLen }}
+        />
+      )}
+      {buckets.map((b, i) => (
+        <g key={i} className="trend-pt" style={{ animationDelay: `${0.15 + i * 0.08}s` }}>
+          {showIn && (
+            <circle cx={x(i)} cy={y(b.income)} r="4" fill="#059669" stroke="#fff" strokeWidth="2">
+              <title>{b.label}: Pemasukan {formatRp(b.income)}</title>
+            </circle>
+          )}
+          {showOut && (
+            <circle cx={x(i)} cy={y(b.expense)} r="4" fill="#e11d48" stroke="#fff" strokeWidth="2">
+              <title>{b.label}: Pengeluaran {formatRp(b.expense)}</title>
+            </circle>
+          )}
+          {i % step === 0 && (
+            <text
+              x={x(i)}
+              y={H - 8}
+              textAnchor={i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle')}
+              fontSize="10"
+              fill="#64748b"
+            >
+              {b.label}
+            </text>
+          )}
+        </g>
+      ))}
+    </svg>
+  );
 }
 
 function sameDay(a, b) {
@@ -51,28 +155,38 @@ function pct1(v) {
 function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onSeeAll, refreshKey, liveSnapshot }) {
   const [summary, setSummary] = useState(initialSummary || null);
   const [activity, setActivity] = useState([]);
+  const [buckets, setBuckets] = useState([]);
+  const [trendMode, setTrendMode] = useState('all');
+  const [slide, setSlide] = useState(0);
+  const touchX = useRef(null);
   const [loading, setLoading] = useState(true);
   const appliedSeq = useRef(0);
 
   const custom = rangeOverride && rangeOverride.from && rangeOverride.to ? rangeOverride : null;
+  // Tren garis hanya didukung backend untuk month/year/custom.
+  const trendOn = custom ? true : (period === 'month' || period === 'year');
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     const range = custom ? { from: custom.from, to: custom.to } : null;
+    const trendP = trendOn ? getTrend(period, range).catch(() => null) : Promise.resolve(null);
     Promise.all([
       getSummary(period, range),
       getTransactions({ ...(range || {}), period: range ? '' : period, limit: 3, offset: 0 }),
+      trendP,
     ])
-      .then(([sum, tx]) => {
+      .then(([sum, tx, trend]) => {
         if (!alive) return;
         setSummary(sum);
         setActivity((tx && tx.data) || []);
+        setBuckets((trend && trend.buckets) || []);
       })
       .catch(() => {
         if (!alive) return;
         setSummary(null);
         setActivity([]);
+        setBuckets([]);
       })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -123,6 +237,74 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
   const barH = (pct, v) => (v > 0 ? Math.max(6, Math.round((pct / 100) * 86)) : 4);
 
   const catRows = ((summary && summary.breakdown) || []).filter((b) => b.type === 'expense' && b.total > 0);
+
+  const trendNote = custom
+    ? ('Tren ' + rangeSub)
+    : (period === 'year' ? 'Tren bulanan tahun ini' : 'Tren mingguan bulan ini');
+  const showCarousel = trendOn && buckets.length > 0;
+
+  // Kembali ke slide arus kas saat periode/rentang berubah.
+  useEffect(() => { setSlide(0); }, [period, custom && custom.from, custom && custom.to]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Geser manual saja — tanpa auto-putar.
+  function go(d) {
+    setSlide((s) => (s + d + 2) % 2);
+  }
+
+  function onTouchStart(e) {
+    touchX.current = e.changedTouches[0].clientX;
+  }
+
+  function onTouchEnd(e) {
+    const dx = e.changedTouches[0].clientX - (touchX.current || 0);
+    if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
+  }
+
+  const flowBox = (
+    <div className="flow-box" key={`flow-${slide}-${period}-${custom ? custom.from + custom.to : ''}-${income}-${expense}`}>
+      <div className="flow-col">
+        <div className="flow-track">
+          <span className="flow-pct in">{pct1(incomePct)}%</span>
+          <div className="flow-fill in" style={{ height: barH(incomePct, income) + 'px' }}>
+            <span className="material-symbols-outlined">arrow_downward</span>
+          </div>
+        </div>
+        <span className="flow-name">Masuk</span>
+        <span className="flow-amt in">{formatNum(income)}</span>
+      </div>
+      <div className="flow-col">
+        <div className="flow-track">
+          <span className="flow-pct out">{pct1(expensePct)}%</span>
+          <div className="flow-fill out" style={{ height: barH(expensePct, expense) + 'px' }}>
+            <span className="material-symbols-outlined">arrow_upward</span>
+          </div>
+        </div>
+        <span className="flow-name">Keluar</span>
+        <span className="flow-amt out">{formatNum(expense)}</span>
+      </div>
+    </div>
+  );
+
+  const trendBox = (
+    <div className="trend-box" key={`trend-${slide}-${trendMode}-${period}-${custom ? custom.from + custom.to : ''}-${buckets.length}`}>
+      <div className="trend-toggle" role="tablist" aria-label="Seri tren">
+        {[['all', 'Semua'], ['income', 'Pemasukan'], ['expense', 'Pengeluaran']].map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            role="tab"
+            aria-selected={trendMode === v}
+            className={trendMode === v ? 'trend-chip active' : 'trend-chip'}
+            onClick={() => setTrendMode(v)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <TrendChart buckets={buckets} mode={trendMode} />
+      <p className="trend-note">{trendNote}</p>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -183,28 +365,43 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
           </div>
           <span className={'health ' + health.cls}>{health.text}</span>
         </div>
-        <div className="flow-box">
-          <div className="flow-col">
-            <span className="flow-pct in">{pct1(incomePct)}%</span>
-            <div className="flow-track">
-              <div className="flow-fill in" style={{ height: barH(incomePct, income) + 'px' }}>
-                <span className="material-symbols-outlined">arrow_downward</span>
+        {showCarousel ? (
+          <div
+            className="carousel"
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+          >
+            <div className="carousel-viewport">
+              <div
+                className="carousel-track"
+                style={{ transform: slide === 0 ? 'translateX(0)' : 'translateX(-100%)' }}
+              >
+                <div className="carousel-page" aria-hidden={slide !== 0}>
+                  {flowBox}
+                </div>
+                <div className="carousel-page" aria-hidden={slide !== 1}>
+                  {trendBox}
+                </div>
               </div>
             </div>
-            <span className="flow-name">Masuk</span>
-            <span className="flow-amt in">{formatNum(income)}</span>
-          </div>
-          <div className="flow-col">
-            <span className="flow-pct out">{pct1(expensePct)}%</span>
-            <div className="flow-track">
-              <div className="flow-fill out" style={{ height: barH(expensePct, expense) + 'px' }}>
-                <span className="material-symbols-outlined">arrow_upward</span>
-              </div>
+            <div className="carousel-dots" role="tablist" aria-label="Pilih grafik">
+              {['Arus kas', 'Tren'].map((label, i) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="tab"
+                  aria-selected={i === slide}
+                  aria-label={'Tampilkan ' + label}
+                  title={label}
+                  className={i === slide ? 'carousel-dot active' : 'carousel-dot'}
+                  onClick={() => setSlide(i)}
+                />
+              ))}
             </div>
-            <span className="flow-name">Keluar</span>
-            <span className="flow-amt out">{formatNum(expense)}</span>
           </div>
-        </div>
+        ) : (
+          flowBox
+        )}
         {custom && (
           <div className="range-banner">
             <span className="material-symbols-outlined">date_range</span>

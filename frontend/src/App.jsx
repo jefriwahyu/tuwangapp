@@ -81,11 +81,18 @@ function App() {
       // Tempel ringkasan inline ke chart — tanpa fetch ulang.
       // Periode query_report ikut data.period, transaksi pakai periode aktif.
       const summaryPeriod = data.period || chartPeriod;
-      if (data.summary && data.summary.period === summaryPeriod) {
+      const hasLive = Boolean(data.summary && data.summary.period === summaryPeriod);
+      if (hasLive) {
         liveSeq.current += 1;
-        setLiveSummary({ summary: data.summary, seq: liveSeq.current });
+        setLiveSummary({ summary: data.summary, seq: liveSeq.current, saved: data.saved || [] });
       }
-      setSummaryKey((k) => k + 1);
+      // Refresh senyap hanya kalau DB mungkin berubah (transaksi/laporan),
+      // bukan untuk chitchat. Bump kedua 1,5 dtk menutup jeda baca-tulis
+      // Supabase supaya aktivitas/tren konvergen tanpa pindah tab.
+      if (hasLive || (data.saved && data.saved.length) || data.period) {
+        setSummaryKey((k) => k + 1);
+        setTimeout(() => setSummaryKey((k) => k + 1), 1500);
+      }
     } catch (err) {
       setMessages((prev) => [...prev, {
         id: Date.now() + 1,

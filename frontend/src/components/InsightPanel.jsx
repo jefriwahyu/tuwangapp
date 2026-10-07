@@ -195,7 +195,7 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
       <div className="tabs-body">
         {tab === 'summary' && (
           <SummaryChart
-            key={`${period}-${refreshKey}-${historyRange ? `${historyRange.from}_${historyRange.to}` : 'preset'}`}
+            key={`${period}-${historyRange ? `${historyRange.from}_${historyRange.to}` : 'preset'}`}
             period={period}
             initialSummary={summary}
             rangeOverride={historyRange}
