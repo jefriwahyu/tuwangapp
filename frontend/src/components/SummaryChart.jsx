@@ -208,8 +208,8 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
         {custom && (
           <div className="range-banner">
             <span className="material-symbols-outlined">date_range</span>
-            <span>Filter riwayat: {rangeSub}</span>
-            <button type="button" className="range-clear" onClick={onClearRange}>Kembali ke preset</button>
+            <span>{rangeSub} • dari Riwayat.</span>
+            <button type="button" className="range-clear" onClick={onClearRange}>Kembali ke {periodLabel}</button>
           </div>
         )}
       </div>

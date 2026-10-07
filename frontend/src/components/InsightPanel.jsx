@@ -8,7 +8,8 @@ const TABS = [
   { id: 'guide', label: 'Panduan', icon: 'menu_book' },
 ];
 
-function GuidePanel({ onTry }) {
+function GuidePanel() {
+  const [copied, setCopied] = useState(null);
   const examples = [
     {
       tag: 'Pengeluaran Makan',
@@ -32,6 +33,22 @@ function GuidePanel({ onTry }) {
       fill: 'Bayar listrik 200rb dan pulsa 50rb',
     },
   ];
+
+  // Klik kartu contoh = salin teksnya saja, tidak langsung terkirim.
+  async function copyExample(ex) {
+    try {
+      await navigator.clipboard.writeText(ex.fill);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = ex.fill;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch { /* abaikan */ }
+      ta.remove();
+    }
+    setCopied(ex.fill);
+    setTimeout(() => setCopied((c) => (c === ex.fill ? null : c)), 1500);
+  }
 
   return (
     <div className="guide">
@@ -64,14 +81,14 @@ function GuidePanel({ onTry }) {
             key={ex.quote}
             type="button"
             className="guide-ex"
-            onClick={() => onTry && onTry(ex.fill)}
+            onClick={() => copyExample(ex)}
           >
             <span className="guide-ex-top">
               <span className={`guide-tag ${ex.tagCls}`}>{ex.tag}</span>
-              <span className="material-symbols-outlined">content_copy</span>
+              <span className="material-symbols-outlined">{copied === ex.fill ? 'check' : 'content_copy'}</span>
             </span>
             <p className="guide-ex-quote">{ex.quote}</p>
-            <p className="guide-ex-res">{ex.res}</p>
+            <p className="guide-ex-res">{copied === ex.fill ? 'Tersalin — tinggal tempel di kolom chat.' : ex.res}</p>
           </button>
         ))}
       </div>
@@ -100,7 +117,7 @@ function GuidePanel({ onTry }) {
   );
 }
 
-function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChanged, onFillExample }) {
+function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChanged }) {
   const [tab, setTab] = useState('summary');
   const [summary, setSummary] = useState(null);
   const [periodOpen, setPeriodOpen] = useState(false);
@@ -130,8 +147,10 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
                 onClick={() => setTab(t.id)}
               >
                 <span className="material-symbols-outlined">{t.icon}</span>
-                {t.label}
-                {tab === t.id && <span className="tab-ind" aria-hidden="true" />}
+                <span className="tab-txt">
+                  {t.label}
+                  {tab === t.id && <span className="tab-ind" aria-hidden="true" />}
+                </span>
               </button>
             ))}
           </div>
@@ -171,12 +190,6 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
             <span className="guide-badge">Panduan Pemula</span>
           )}
         </div>
-        {tab === 'guide' && (
-          <p className="tabs-sub">
-            <span className="material-symbols-outlined">verified</span>
-            Panduan mudah mencatat keuangan dengan bahasa sehari-hari
-          </p>
-        )}
       </div>
 
       <div className="tabs-body">
@@ -196,13 +209,13 @@ function InsightPanel({ period, onPeriodChange, refreshKey, liveSnapshot, onChan
           <TransactionHistory refreshKey={refreshKey} onChanged={onChanged} period={period} onRangeChange={setHistoryRange} initialCustom={historyRange} />
         )}
         {tab === 'guide' && (
-          <GuidePanel onTry={(text) => onFillExample && onFillExample(text)} />
+          <GuidePanel />
         )}
       </div>
 
       {tab === 'guide' && (
         <div className="cta-wrap">
-          <button type="button" className="btn-cta" onClick={() => onFillExample && onFillExample('beli makan siang 25rb')}>
+          <button type="button" className="btn-cta" onClick={() => document.getElementById('chat-input')?.focus()}>
             <span className="material-symbols-outlined">edit_note</span>
             Mulai Ketik Transaksi
           </button>

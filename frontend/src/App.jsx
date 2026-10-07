@@ -248,7 +248,6 @@ function App() {
               refreshKey={summaryKey}
               liveSnapshot={liveSummary}
               onChanged={() => setSummaryKey((k) => k + 1)}
-              onFillExample={(text) => handleSend(text)}
             />
           </aside>
         </main>

@@ -303,7 +303,10 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
                   </button>
                 </div>
                 {!following && (
-                  <p className="hx-applied">Menampilkan {applied.from} – {applied.to}. Ringkasan ikut rentang ini.</p>
+                  <p className="hx-applied">
+                    <span className="material-symbols-outlined">info</span>
+                    <span>{fmtShort(applied.from)} – {fmtShort(applied.to)} • ringkasan ikut.</span>
+                  </p>
                 )}
               </div>
             )}
