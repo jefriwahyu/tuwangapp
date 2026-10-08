@@ -150,6 +150,23 @@ function pct1(v) {
   return String(parseFloat(v.toFixed(1)));
 }
 
+// Jendela optimistis: 10 dtk setelah catat, angka live (dari respons chat)
+// dianggap lebih benar dari fetch yang angkanya lebih kecil (server belum
+// konvergen). Lewat dari itu, server selalu menang.
+const LIVE_WINDOW_MS = 10000;
+
+function liveRowKey(r) {
+  return [r.type, r.amount, r.category, r.description].join('|');
+}
+
+// Gabung baris live di atas data server, buang yang sudah ada di server
+// (cocok via jenis+nominal+kategori+deskripsi) supaya tidak dobel.
+function mergeLiveRows(live, server, limit = 3) {
+  const seen = new Set((server || []).map(liveRowKey));
+  const extra = (live || []).filter((r) => !seen.has(liveRowKey(r)));
+  return [...extra, ...(server || [])].slice(0, limit);
+}
+
 // Panel ringkasan persis mock: KPI 3 kolom + arus kas + kategori + aktivitas.
 // Tanpa carousel, tanpa Chart.js — bar digambar dengan CSS murni.
 function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onSeeAll, refreshKey, liveSnapshot }) {
@@ -161,6 +178,11 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
   const touchX = useRef(null);
   const [loading, setLoading] = useState(true);
   const appliedSeq = useRef(0);
+  // Muat pertama pakai skeleton; refresh berikutnya senyap supaya angka
+  // live dari chat tidak kedip dan tidak ketimpa duluan.
+  const firstLoaded = useRef(false);
+  // Baris "Aktivitas Terakhir" dari struk chat terakhir + waktunya.
+  const liveRef = useRef(null);
 
   const custom = rangeOverride && rangeOverride.from && rangeOverride.to ? rangeOverride : null;
   // Tren garis hanya didukung backend untuk month/year/custom.
@@ -168,7 +190,13 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    // Seq live saat fetch dimulai — kalau live baru datang saat fetch
+    // jalan, hasil fetch sudah basi untuk angka: jangan timpa live.
+    const liveAtStart = appliedSeq.current;
+    // Skeleton hanya untuk muat pertama; refresh setelah catat dibuat
+    // senyap supaya angka live tidak kedip.
+    const isFirst = !firstLoaded.current;
+    if (isFirst) setLoading(true);
     const range = custom ? { from: custom.from, to: custom.to } : null;
     const trendP = trendOn ? getTrend(period, range).catch(() => null) : Promise.resolve(null);
     Promise.all([
@@ -178,17 +206,42 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
     ])
       .then(([sum, tx, trend]) => {
         if (!alive) return;
+        firstLoaded.current = true;
+        // Angka live = respons chat yang baru disimpan. Server `lt=now`
+        // bisa belum memuatnya di fetch pertama (jam DB/jeda konvergen),
+        // jadi selama 10 dtk setelah catat: angka tidak boleh turun,
+        // aktivitas selalu digabung dengan struk live.
+        const live = liveRef.current;
+        const liveFresh = live && (Date.now() - live.at < LIVE_WINDOW_MS)
+          && live.summary.period === period && !custom;
+        const serverRows = (tx && tx.data) || [];
+        if (liveFresh) {
+          const li = live.summary.income || 0;
+          const le = live.summary.expense || 0;
+          const liveBetter = (sum.income || 0) < li || (sum.expense || 0) < le;
+          if (liveBetter || appliedSeq.current !== liveAtStart) {
+            setSummary(live.summary);
+          } else {
+            setSummary(sum);
+          }
+          setActivity(mergeLiveRows(live.rows, serverRows));
+          setBuckets((trend && trend.buckets) || []);
+          return;
+        }
         setSummary(sum);
-        setActivity((tx && tx.data) || []);
+        setActivity(serverRows);
         setBuckets((trend && trend.buckets) || []);
       })
       .catch(() => {
         if (!alive) return;
+        // Fetch gagal setelah live tampil: jangan hapus angka live.
+        if (appliedSeq.current !== liveAtStart) return;
+        firstLoaded.current = true;
         setSummary(null);
         setActivity([]);
         setBuckets([]);
       })
-      .finally(() => { if (alive) setLoading(false); });
+      .finally(() => { if (alive && isFirst) setLoading(false); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, refreshKey, custom && custom.from, custom && custom.to]);
@@ -202,11 +255,24 @@ function SummaryChart({ period, initialSummary, rangeOverride, onClearRange, onS
   // datang dan periodenya cocok, supaya tiap respons diterapkan.
   useEffect(() => {
     if (liveSnapshot && liveSnapshot.summary
-      && liveSnapshot.seq > appliedSeq.current
       && liveSnapshot.summary.period === period
       && !custom) {
-      appliedSeq.current = liveSnapshot.seq;
-      setSummary(liveSnapshot.summary);
+      if (liveSnapshot.seq >= appliedSeq.current) {
+        appliedSeq.current = liveSnapshot.seq;
+        setSummary(liveSnapshot.summary);
+        // Simpan struk untuk digabung saat refresh — aktivitas tidak
+        // boleh balik kosong walau server belum konvergen.
+        const savedRows = (liveSnapshot.saved || []).map((s, i) => ({
+          id: `live-${liveSnapshot.seq}-${i}`,
+          type: s.type,
+          amount: s.amount,
+          category: s.category,
+          description: s.description,
+          created_at: new Date().toISOString(),
+        }));
+        liveRef.current = { summary: liveSnapshot.summary, rows: savedRows, at: Date.now() };
+        if (savedRows.length) setActivity(savedRows);
+      }
       setLoading(false);
     }
   }, [liveSnapshot, period, custom]);
