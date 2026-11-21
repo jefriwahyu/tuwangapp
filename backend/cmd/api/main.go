@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/gin-contrib/cors"
@@ -44,10 +45,30 @@ func main() {
 		log.Fatalf("Gagal ambil JWKS dari Supabase: %s", err)
 	}
 
+	// PORT wajib dibaca dari environment variable saat deploy (RunxBuild,
+	// Kubernetes, dsb). Default 8080 hanya untuk pengembangan lokal.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	// CORS_ORIGINS dipisah koma, misal:
+	//   http://localhost:5173,https://tuwangapp.runxbuild.app
+	// Default hanya untuk pengembangan lokal.
+	corsOrigins := []string{"http://localhost:5173"}
+	if raw := os.Getenv("CORS_ORIGINS"); raw != "" {
+		corsOrigins = nil
+		for _, origin := range strings.Split(raw, ",") {
+			if origin = strings.TrimSpace(origin); origin != "" {
+				corsOrigins = append(corsOrigins, origin)
+			}
+		}
+	}
+
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:5173"},
+		AllowOrigins: corsOrigins,
 		AllowMethods: []string{"GET", "POST", "DELETE"},
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	}))
@@ -66,5 +87,8 @@ func main() {
 		protected.DELETE("/transactions/:id", handler.DeleteTransactionHandler)
 	}
 
-	router.Run(":8080")
+	log.Printf("Server berjalan di port %s", port)
+	if err := router.Run(":" + port); err != nil {
+		log.Fatalf("Gagal menjalankan server: %s", err)
+	}
 }
