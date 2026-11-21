@@ -97,7 +97,7 @@ function App() {
       setMessages((prev) => [...prev, {
         id: Date.now() + 1,
         sender: 'bot',
-        text: 'Waduh, gagal terhubung ke server. Pastikan backend jalan di localhost:8080.',
+        text: 'Waduh, gagal terhubung ke server. Coba lagi sebentar lagi.',
         time: nowTime(),
       }]);
     } finally {

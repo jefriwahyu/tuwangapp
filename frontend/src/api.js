@@ -1,6 +1,8 @@
 import { supabase } from './lib/supabaseClient';
 
-const BASE_URL = 'http://localhost:8080/api/v1';
+// Di Vercel, set VITE_API_URL ke URL backend RunxBuild + /api/v1,
+// contoh: https://tuwangapp-api.runxbuild.app/api/v1
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1').replace(/\/+$/, '');
 
 async function authHeader() {
     const { data } = await supabase.auth.getSession();

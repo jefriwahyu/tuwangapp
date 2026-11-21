@@ -8,6 +8,8 @@ node_modules/
 # Go
 *.exe
 *.test
+backend/server
+backend/server.exe
 
 # Editor
 .vscode/

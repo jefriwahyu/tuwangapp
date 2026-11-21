@@ -29,8 +29,12 @@ func (t *supabaseAPIKeyTransport) RoundTrip(req *http.Request) (*http.Response, 
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("Peringatan: file .env tidak ditemukan")
+	// Muat .env untuk pengembangan lokal. Di production, konfigurasi
+	// datang dari environment variables platform (RunxBuild).
+	for _, path := range []string{".env", "cmd/api/.env"} {
+		if err := godotenv.Load(path); err == nil {
+			break
+		}
 	}
 
 	jwksURL := os.Getenv("SUPABASE_URL") + "/auth/v1/.well-known/jwks.json"
