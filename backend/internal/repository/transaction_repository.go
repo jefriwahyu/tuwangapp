@@ -531,7 +531,7 @@ func fetchTrendRows(userID, startDate, endDate string) ([]TransactionRow, error)
 // trendDayKey mengubah created_at ISO menjadi YYYY-MM-DD (+07:00).
 func trendDayKey(iso string) string {
 	if t, err := time.Parse(time.RFC3339, iso); err == nil {
-		return t.Format("2006-01-02")
+		return t.In(time.Local).Format("2006-01-02")
 	}
 	if len(iso) >= 10 {
 		return iso[:10]
@@ -592,7 +592,7 @@ func GetTrend(userID, period string) ([]TrendBucket, error) {
 		for _, row := range rows {
 			m := -1
 			if t, err := time.Parse(time.RFC3339, row.CreatedAt); err == nil {
-				m = int(t.Month()) - 1
+				m = int(t.In(time.Local).Month()) - 1
 			} else if len(row.CreatedAt) >= 7 {
 				if mm, err := strconv.Atoi(row.CreatedAt[5:7]); err == nil {
 					m = mm - 1
@@ -712,7 +712,7 @@ func GetTrendCustom(userID, from, to string) ([]TrendBucket, error) {
 		for _, row := range rows {
 			k := ""
 			if t, err := time.Parse(time.RFC3339, row.CreatedAt); err == nil {
-				k = t.Format("2006-01")
+				k = t.In(time.Local).Format("2006-01")
 			} else if len(row.CreatedAt) >= 7 {
 				k = row.CreatedAt[:7]
 			}

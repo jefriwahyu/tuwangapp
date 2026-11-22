@@ -6,10 +6,10 @@ Frontend tetap memakai project Vercel yang sudah ada.
 ## Yang sudah disiapkan di repo
 
 - `backend/vercel.json` — mengaktifkan Go Framework Preset, build dari `cmd/api`, dan region Singapore (`sin1`).
-- `backend/cmd/api/main.go` — membaca `PORT` dan `CORS_ORIGINS`; `time/tzdata` disematkan agar `TZ=Asia/Jakarta` bekerja.
-- `backend/.env.example` — contoh environment variables, termasuk `TZ` dan `GIN_MODE`.
+- `backend/cmd/api/main.go` — membaca `PORT` dan `CORS_ORIGINS`; `time/tzdata` disematkan agar `APP_TZ=Asia/Jakarta` bekerja. Vercel menolak nama `TZ` (reserved).
+- `backend/.env.example` — contoh environment variables, termasuk `APP_TZ` dan `GIN_MODE`.
 - `frontend/.env.example` — contoh `VITE_API_URL` untuk Vercel.
-- `render.yaml` — tetap ada sebagai alternatif; sudah ditambah `TZ`.
+- `render.yaml` — tetap ada sebagai alternatif; sudah ditambah `APP_TZ`.
 
 ## Prasyarat
 
@@ -60,9 +60,10 @@ Tambahkan satu per satu di bagian **Environment Variables**:
 | `GROQ_API_KEY` | `gsk_...` | Rahasia |
 | `CORS_ORIGINS` | `https://tuwangapp.vercel.app` | Origin frontend persis, tanpa trailing slash |
 | `GIN_MODE` | `release` | |
-| `TZ` | `Asia/Jakarta` | Agar batas "hari ini"/"bulan ini" benar |
+| `APP_TZ` | `Asia/Jakarta` | Agar batas "hari ini"/"bulan ini" benar. Vercel menolak nama `TZ`; `APP_TZ` default-nya juga `Asia/Jakarta` kalau kosong. |
 
 - **Jangan set `PORT`.** Vercel mengisinya otomatis.
+- **Jangan set `TZ`.** Nama itu di-reserve Vercel; gunakan `APP_TZ`.
 - **Jangan set `SUPABASE_JWT_SECRET`.** Kode tidak memakainya.
 - Kalau mau mencoba dari Preview Deployment, tambahkan environment variables yang sama untuk environment **Preview**. `CORS_ORIGINS` untuk preview harus berisi origin preview yang dipakai, atau tes hanya dari production.
 
@@ -129,7 +130,7 @@ Kalau frontend memakai custom domain, gunakan domain itu. Kalau muncul CORS erro
 | 401 | Token tidak ada/expired | Login ulang |
 | Chat error | Groq key/limit | Cek dashboard Groq |
 | Frontend memanggil `localhost` | `VITE_API_URL` belum di-set saat build | Set env, redeploy frontend |
-| Jam transaksi bergeser | `TZ` belum di-set | Set `TZ=Asia/Jakarta`, redeploy |
+| Jam transaksi bergeser | `APP_TZ` belum di-set | Set `APP_TZ=Asia/Jakarta`, redeploy |
 | Request pertama lambat | Cold start | Normal, sekitar 1–2 detik |
 
 ## Catatan free tier
@@ -162,7 +163,7 @@ vercel env add SUPABASE_SERVICE_KEY production
 vercel env add GROQ_API_KEY production
 vercel env add CORS_ORIGINS production
 vercel env add GIN_MODE production
-vercel env add TZ production
+vercel env add APP_TZ production
 ```
 
 Jangan pernah commit `.env` atau menaruh `SUPABASE_SERVICE_KEY` di frontend.

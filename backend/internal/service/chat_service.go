@@ -310,7 +310,7 @@ func toDeleteCandidate(row repository.TransactionRow) model.DeleteCandidate {
 
 func formatShortDate(iso string) string {
 	if t, err := time.Parse(time.RFC3339, iso); err == nil {
-		return t.Format("2 Jan 2006")
+		return t.In(time.Local).Format("2 Jan 2006")
 	}
 	if len(iso) >= 10 {
 		return iso[:10]

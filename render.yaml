@@ -20,5 +20,5 @@ services:
         sync: false
       - key: GIN_MODE
         value: release
-      - key: TZ
+      - key: APP_TZ
         value: Asia/Jakarta

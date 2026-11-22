@@ -6,7 +6,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	// Sematkan tzdata agar TZ=Asia/Jakarta tetap bekerja di runtime minimal.
+	"time"
+	// Sematkan tzdata agar APP_TZ=Asia/Jakarta tetap bekerja di runtime minimal.
 	_ "time/tzdata"
 
 	"github.com/MicahParks/keyfunc/v3"
@@ -38,6 +39,19 @@ func main() {
 			break
 		}
 	}
+
+	// Vercel reserves TZ. Gunakan APP_TZ (default Asia/Jakarta) agar
+	// batas "hari ini"/"bulan ini" mengikuti WIB.
+	tz := os.Getenv("APP_TZ")
+	if tz == "" {
+		tz = "Asia/Jakarta"
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		log.Printf("APP_TZ %q tidak valid, memakai WIB: %s", tz, err)
+		loc = time.FixedZone("WIB", 7*60*60)
+	}
+	time.Local = loc
 
 	jwksURL := os.Getenv("SUPABASE_URL") + "/auth/v1/.well-known/jwks.json"
 	httpClient := &http.Client{
