@@ -31,15 +31,32 @@ function shortRp(n) {
   return String(Math.round(n || 0));
 }
 
+// Di layar sempit grafik ikut mengecil; viewBox & font dikecilkan agar
+// label sumbu tidak ikut menyusut jadi ~5px dan tetap terbaca.
+function useCompactChart() {
+  const [compact, setCompact] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const onChange = (e) => setCompact(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return compact;
+}
+
 // Grafik garis SVG murni: 2 seri (pemasukan hijau, pengeluaran merah),
 // tiap bucket jadi 1 titik dan titik-titik dihubungkan garis.
 function TrendChart({ buckets, mode }) {
-  const W = 560;
-  const H = 220;
-  const PADL = 44;
-  const PADR = 12;
+  const compact = useCompactChart();
+  const W = compact ? 360 : 560;
+  const H = compact ? 200 : 220;
+  const PADL = compact ? 38 : 44;
+  const PADR = compact ? 8 : 12;
   const PADT = 14;
-  const PADB = 28;
+  const PADB = compact ? 26 : 28;
+  const labelSize = compact ? 11 : 10;
   const iw = W - PADL - PADR;
   const ih = H - PADT - PADB;
   const n = buckets.length;
@@ -60,7 +77,9 @@ function TrendChart({ buckets, mode }) {
   const inLen = showIn ? pathLen('income') : 0;
   const outLen = showOut ? pathLen('expense') : 0;
   // Label sumbu-X direnggangkan kalau titik banyak (custom harian).
-  const step = n > 12 ? Math.ceil(n / 12) : 1;
+  // Di mobile batasnya lebih kecil supaya label tidak bertumpuk.
+  const maxLabels = compact ? 8 : 12;
+  const step = n > maxLabels ? Math.ceil(n / maxLabels) : 1;
 
   return (
     <svg key={`${mode}-${n}`} viewBox={`0 0 ${W} ${H}`} className="trend-svg" role="img" aria-label="Grafik tren keuangan">
@@ -70,7 +89,7 @@ function TrendChart({ buckets, mode }) {
         return (
           <g key={f}>
             <line x1={PADL} y1={gy} x2={W - PADR} y2={gy} stroke={f === 0 ? '#cbd5e1' : 'rgba(148,163,184,.25)'} strokeWidth="1" />
-            <text x={PADL - 6} y={gy + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{shortRp(gv)}</text>
+            <text x={PADL - 6} y={gy + 4} textAnchor="end" fontSize={labelSize} fill="#94a3b8">{shortRp(gv)}</text>
           </g>
         );
       })}
@@ -115,7 +134,7 @@ function TrendChart({ buckets, mode }) {
               x={x(i)}
               y={H - 8}
               textAnchor={i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle')}
-              fontSize="10"
+              fontSize={labelSize}
               fill="#64748b"
             >
               {b.label}

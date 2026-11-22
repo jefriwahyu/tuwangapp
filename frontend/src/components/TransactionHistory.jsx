@@ -367,7 +367,7 @@ function TransactionHistory({ refreshKey, onChanged, period, onRangeChange, init
                       <div className="tx-main">
                         <strong className="tx-cat">{tx.description || tx.category || (income ? 'Pemasukan' : 'Pengeluaran')}</strong>
                         <span className="tx-date">
-                          {rowSub(tx, key)} • <span className="hx-via">Via Chat</span>
+                          {rowSub(tx, key)} <span className="hx-via">Via Chat</span>
                         </span>
                       </div>
                       <div className="hx-right">

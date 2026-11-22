@@ -168,7 +168,7 @@ function App() {
                 <em>{email}</em>
               </span>
             </div>
-            <button className="topbar-logout" onClick={() => supabase.auth.signOut()} title="Keluar">
+            <button className="topbar-logout" onClick={() => supabase.auth.signOut()} title="Keluar" aria-label="Keluar">
               <span className="material-symbols-outlined">logout</span>
               <span>Keluar</span>
             </button>

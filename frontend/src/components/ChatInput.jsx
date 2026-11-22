@@ -26,7 +26,7 @@ function ChatInput({ onSend, disabled }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ketik di sini... (cth: beli makan siang 25rb)"
+          placeholder="Ketik transaksi, cth: kopi 15rb"
           disabled={disabled}
           maxLength={500}
         />
