@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	// Sematkan tzdata agar TZ=Asia/Jakarta tetap bekerja di runtime minimal.
+	_ "time/tzdata"
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/gin-contrib/cors"
@@ -30,7 +32,7 @@ func (t *supabaseAPIKeyTransport) RoundTrip(req *http.Request) (*http.Response, 
 
 func main() {
 	// Muat .env untuk pengembangan lokal. Di production, konfigurasi
-	// datang dari environment variables platform (RunxBuild).
+	// datang dari environment variables platform (Vercel, Render, dsb.).
 	for _, path := range []string{".env", "cmd/api/.env"} {
 		if err := godotenv.Load(path); err == nil {
 			break
@@ -49,15 +51,15 @@ func main() {
 		log.Fatalf("Gagal ambil JWKS dari Supabase: %s", err)
 	}
 
-	// PORT wajib dibaca dari environment variable saat deploy (RunxBuild,
-	// Kubernetes, dsb). Default 8080 hanya untuk pengembangan lokal.
+	// PORT wajib dibaca dari environment variable saat deploy (Vercel,
+	// Render, Kubernetes, dsb). Default 8080 hanya untuk pengembangan lokal.
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	// CORS_ORIGINS dipisah koma, misal:
-	//   http://localhost:5173,https://tuwangapp.runxbuild.app
+	//   http://localhost:5173,https://tuwangapp.vercel.app
 	// Default hanya untuk pengembangan lokal.
 	corsOrigins := []string{"http://localhost:5173"}
 	if raw := os.Getenv("CORS_ORIGINS"); raw != "" {
