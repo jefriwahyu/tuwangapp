@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type groqMessage struct {
@@ -45,19 +47,19 @@ type ExtractedMessage struct {
 	// Field tunggal di bawah ini LEGACY (sebelum multi-transaksi).
 	// LLM baru tidak perlu mengisinya; backend memakainya hanya sebagai
 	// fallback kalau "transactions" kosong (misal respons model lama).
-	Type        string            `json:"type"`
-	Amount      float64           `json:"amount"`
-	Category    string            `json:"category"`
-	Description string            `json:"description"`
+	Type        string  `json:"type"`
+	Amount      float64 `json:"amount"`
+	Category    string  `json:"category"`
+	Description string  `json:"description"`
 	// Transactions adalah daftar transaksi untuk intent "transaction".
 	// Maksimal 5 — backend memotong sisanya dan menolak yang invalid.
 	Transactions []TransactionItem `json:"transactions"`
 	// Lang adalah kode bahasa pesan user (ISO 639-1, misal "id"/"en").
 	// Dipakai backend untuk memilih template balasan hardcoded.
-	Lang        string            `json:"lang"`
-	Period       string            `json:"period"`
-	Target       string            `json:"target"`
-	Reply        string            `json:"reply"`
+	Lang   string `json:"lang"`
+	Period string `json:"period"`
+	Target string `json:"target"`
+	Reply  string `json:"reply"`
 }
 
 const systemPrompt = `You are a friendly, casual finance tracking assistant. ALWAYS reply to the user in the SAME language the user uses (Indonesian, English, or any other language).
@@ -158,7 +160,11 @@ func ExtractTransaction(userMessage string) (ExtractedMessage, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return ExtractedMessage{}, fmt.Errorf("groq API error: status %d", resp.StatusCode)
+		// Sertakan pesan error Groq (mis. "Invalid API Key") di log agar
+		// penyebabnya langsung kelihatan. Batasi 512 byte, jangan pernah
+		// mencatat header Authorization.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return ExtractedMessage{}, fmt.Errorf("groq API error: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var groqResp groqResponse
