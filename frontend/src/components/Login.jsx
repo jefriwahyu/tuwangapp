@@ -234,7 +234,7 @@ function Login() {
                   </>
                 ) : (
                   <>
-                    <span>{isLogin ? 'Masuk ke Akun' : 'Daftar Akun Baru'}</span>
+                    <span>{isLogin ? 'Masuk' : 'Daftar'}</span>
                     <span className="material-symbols-outlined">
                       {isLogin ? 'arrow_forward' : 'person_add'}
                     </span>

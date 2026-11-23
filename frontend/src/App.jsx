@@ -262,7 +262,7 @@ function App() {
         <footer className="app-foot">
           <div className="app-foot-inner">
             <span className="app-foot-brand">Taktuntuwang <em>— Asisten Pencatatan Keuangan Percakapan Cerdas</em></span>
-            <span className="app-foot-copy">© 2024 Taktuntuwang. Hak cipta dilindungi undang-undang.</span>
+            <span className="app-foot-copy">© 2026 Taktuntuwang. Hak cipta dilindungi undang-undang.</span>
           </div>
         </footer>
       </div>

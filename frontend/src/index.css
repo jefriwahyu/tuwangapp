@@ -558,6 +558,10 @@ input { font-family: var(--sans); }
   .login-features, .login-meta { display: none; }
   .login-form-wrap { padding: 24px 20px; }
   .login-tabs { margin-bottom: 20px; }
+  /* Teks keamanan naik cukup rapat sisinya agar tidak terlalu ke kanan. */
+  .login-secure { padding: 16px 0 0; font-size: 10px; gap: 4px; overflow-wrap: anywhere; }
+  /* Tombol agak lebih pendek + di tengah agar nggak terasa kepanjangan. */
+  .login-submit { width: fit-content; min-width: 160px; align-self: center; }
 
   .app-foot-inner { padding: 12px 14px; }
   .app-foot-brand em { display: none; }
