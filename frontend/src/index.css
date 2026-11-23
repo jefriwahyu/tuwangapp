@@ -559,7 +559,7 @@ input { font-family: var(--sans); }
   .login-form-wrap { padding: 24px 20px; }
   .login-tabs { margin-bottom: 20px; }
   /* Teks keamanan: blok yang bisa wrap, di tengah, sisa kanannya diimages. */
-  .login-secure { width: 100%; padding: 0 16px; box-sizing: border-box; display: block; text-align: center; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; margin-top: 16px; }
+  .login-secure { width: 100%; box-sizing: border-box; display: block; text-align: left; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; margin-top: 16px; }
   /* Tombol agak lebih pendek + di tengah agar nggak terasa kepanjangan. */
   .login-submit { width: fit-content; min-width: 160px; align-self: center; }
 
