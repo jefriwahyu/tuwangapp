@@ -41,6 +41,10 @@ input { font-family: var(--sans); }
 /* ===== Login ===== */
 .login-page { min-height: 100svh; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: var(--login-page); }
 .login-card { width: 1024px; max-width: 100%; display: grid; grid-template-columns: 1fr 1fr; background: #fff; border-radius: var(--radius-card); overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,.25); }
+/* Grid item wajib boleh menyusut; tanpa ini lebar min-content input (default size)
+   mendorong track grid melebihi kartu di layar sempit, sehingga konten tembus kanan. */
+.login-brand, .login-form-wrap { min-width: 0; }
+.login-form, .login-field, .login-input-wrap, .login-tabs { min-width: 0; }
 .login-brand { background: var(--primary); color: #fff; padding: 48px; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; position: relative; overflow: hidden; text-align: left; }
 .login-glow { position: absolute; border-radius: 50%; pointer-events: none; }
 .login-glow-1 { width: 224px; height: 224px; right: -64px; top: -64px; background: rgba(0,133,93,.3); filter: blur(48px); }
@@ -560,8 +564,9 @@ input { font-family: var(--sans); }
   .login-tabs { margin-bottom: 20px; }
   /* Teks keamanan: blok yang bisa wrap, di tengah, sisa kanannya diimages. */
   .login-secure { width: 100%; box-sizing: border-box; display: block; text-align: left; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; margin-top: 16px; }
-  /* Tombol agak lebih pendek + di tengah agar nggak terasa kepanjangan. */
-  .login-submit { width: fit-content; min-width: 160px; align-self: center; }
+  /* Tombol agak lebih pendek + benar-benar di tengah agar nggak terasa kepanjangan. */
+  .login-submit-wrap { display: flex; justify-content: center; }
+  .login-submit { width: fit-content; min-width: 160px; }
 
   .app-foot-inner { padding: 12px 14px; }
   .app-foot-brand em { display: none; }
