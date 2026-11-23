@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="64" viewBox="0 0 260 64" fill="none">
+  <defs>
+    <linearGradient id="tw-bg" x1="10" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00855d"/>
+      <stop offset="1" stop-color="#006948"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#tw-bg)"/>
+  <path d="M13 27a7 7 0 0 1 7-7h24a7 7 0 0 1 7 7v11a7 7 0 0 1-7 7H20a7 7 0 0 1-7-7V27Z" fill="#fff"/>
+  <path d="M21 45 13 55.5 33 45Z" fill="#fff"/>
+  <path d="M13 27a7 7 0 0 1 7-7h24a7 7 0 0 1 7 7v2.5H13V27Z" fill="#d1fae5"/>
+  <circle cx="45" cy="34" r="3.4" fill="#006948"/>
+  <circle cx="45" cy="34" r="1.2" fill="#fff"/>
+  <text x="76" y="42" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="25" font-weight="700" letter-spacing="-0.5" fill="#0f172a">Taktuntuwang</text>
+</svg>

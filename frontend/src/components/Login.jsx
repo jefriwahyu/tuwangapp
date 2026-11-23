@@ -90,7 +90,7 @@ function Login() {
           <div className="login-brand-top">
             <div className="login-mark">
               <span className="login-mark-icon">
-                <span className="material-symbols-outlined">account_balance_wallet</span>
+                <img src="/logo-mark.svg" alt="" className="brand-mark" />
               </span>
               <span className="login-mark-text">
                 <strong>Taktuntuwang</strong>

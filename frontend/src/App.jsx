@@ -151,7 +151,7 @@ function App() {
         <header className="topbar">
           <div className="topbar-brand">
             <span className="topbar-logo">
-              <span className="material-symbols-outlined">account_balance_wallet</span>
+              <img src="/logo-mark.svg" alt="" className="brand-mark" />
             </span>
             <div className="topbar-title">
               <strong>Taktuntuwang</strong>

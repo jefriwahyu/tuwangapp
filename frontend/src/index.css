@@ -49,6 +49,7 @@ input { font-family: var(--sans); }
 .login-mark { display: flex; align-items: center; gap: 12px; }
 .login-mark-icon { width: 40px; height: 40px; display: grid; place-items: center; background: var(--primary-container); border-radius: var(--radius-box); }
 .login-mark-icon .material-symbols-outlined { font-size: 22px; color: var(--primary-fixed); font-variation-settings: 'FILL' 1; }
+.login-mark-icon .brand-mark { width: 70%; height: 70%; }
 .login-mark-text { display: flex; flex-direction: column; line-height: 1.25; }
 .login-mark-text strong { font-size: 18px; font-weight: 700; color: #fff; }
 .login-mark-text em { font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: .08em; color: #68dba9; }
@@ -113,6 +114,8 @@ input { font-family: var(--sans); }
 .topbar { width: 100%; background: #fff; border: 1px solid rgba(226,232,240,.8); border-radius: var(--radius-card); padding: 14px 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04); display: flex; align-items: center; justify-content: space-between; gap: 16px; box-sizing: border-box; }
 .topbar-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .topbar-logo { width: 36px; height: 36px; border-radius: var(--radius-box); background: var(--emerald-600); color: #fff; display: grid; place-items: center; flex-shrink: 0; }
+.brand-mark { display: block; }
+.topbar-logo .brand-mark { width: 90%; height: 90%; }
 .topbar-logo .material-symbols-outlined { font-size: 20px; }
 .topbar-title { display: flex; flex-direction: column; line-height: 1.2; }
 .topbar-title strong { font-size: 18px; font-weight: 700; color: var(--ink); letter-spacing: -.02em; }
